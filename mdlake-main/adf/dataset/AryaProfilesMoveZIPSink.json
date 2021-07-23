@@ -1,0 +1,22 @@
+{
+	"name": "AryaProfilesMoveZIPSink",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "AryaProfilesLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"folder": {
+			"name": "AryaProfilesDatasets"
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobStorageLocation",
+				"folderPath": "adfprocessedzips",
+				"container": "sampledata"
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

@@ -1,0 +1,63 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"value": "USE-IC-DA-DLDF"
+		},
+		"AmazonS3LinkedService_secretAccessKey": {
+			"value": ""
+		},
+		"AryaProfilesLinkedService_connectionString": {
+			"value": ""
+		},
+		"AzureDatabricksDeltaLakeLinkedService_accessToken": {
+			"value": ""
+		},
+		"AzureDatabricksLinkedService_accessToken": {
+			"value": ""
+		},
+		"AzureSQLMI_UAM_connectionString": {
+			"value": ""
+		},
+		"AzureSQLManagedInstaceLinkedService_connectionString": {
+			"value": ""
+		},
+		"DataLakeLinkedService_accountKey": {
+			"value": ""
+		},
+		"Sftp_LinkupLinkedService_password": {
+			"value": ""
+		},
+		"adfconfig_sqlmi_public_connectionString": {
+			"value": ""
+		},
+		"adfconfig_sqlmi_selfhostedLinkedService_connectionString": {
+			"value": ""
+		},
+		"datawarehouse_sqlmi_selhostedLinkedService_connectionString": {
+			"value": ""
+		},
+		"sqlbackupblobLinkedService_connectionString": {
+			"value": ""
+		},
+		"uam_sqlmi_selfhostedLinkedService_connectionString": {
+			"value": ""
+		},
+		"AmazonS3LinkedService_properties_typeProperties_accessKeyId": {
+			"value": "AKIAT3WSGVATGOFFU53C"
+		},
+		"AzureKeyVaultLinkedService_properties_typeProperties_baseUrl": {
+			"value": "https://sqlmi-keyvault.vault.azure.net/"
+		},
+		"DataLakeLinkedService_properties_typeProperties_url": {
+			"value": "https://dsmldevsa.dfs.core.windows.net"
+		},
+		"Sftp_LinkupLinkedService_properties_typeProperties_host": {
+			"value": "files.linkup.com"
+		},
+		"Sftp_LinkupLinkedService_properties_typeProperties_userName": {
+			"value": "Korn.Ferry"
+		}
+	}
+}

@@ -1,0 +1,12 @@
+{
+	"name": "AzureSQLMI_UAM",
+	"type": "Microsoft.DataFactory/factories/linkedservices",
+	"properties": {
+		"annotations": [],
+		"type": "AzureSqlMI",
+		"typeProperties": {
+			"connectionString": "integrated security=False;encrypt=True;connection timeout=30;data source=use-ic-da-dlmi.public.6897cae55f64.database.windows.net,3342;initial catalog=UAM;user id=DFUser01",
+			"encryptedCredential": "ew0KICAiVmVyc2lvbiI6ICIyMDE3LTExLTMwIiwNCiAgIlByb3RlY3Rpb25Nb2RlIjogIktleSIsDQogICJTZWNyZXRDb250ZW50VHlwZSI6ICJQbGFpbnRleHQiLA0KICAiQ3JlZGVudGlhbElkIjogIlVTRS1JQy1EQS1ETERGX2U1YjViMTI0LTE1NGQtNDk3OC1hOTUyLTMwYzk1MWUwYjMxOSINCn0="
+		}
+	}
+}

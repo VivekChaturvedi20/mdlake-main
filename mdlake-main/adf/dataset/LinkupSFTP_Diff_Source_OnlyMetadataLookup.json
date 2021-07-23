@@ -1,0 +1,30 @@
+{
+	"name": "LinkupSFTP_Diff_Source_OnlyMetadataLookup",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "Sftp_LinkupLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"filename": {
+				"type": "string"
+			}
+		},
+		"folder": {
+			"name": "LinkupDatasets"
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "SftpLocation",
+				"fileName": {
+					"value": "@dataset().filename",
+					"type": "Expression"
+				},
+				"folderPath": "/JDE/Korn Ferry/Feeds/Korn Ferry Organic/Diff"
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

@@ -1,0 +1,21 @@
+{
+	"name": "Binary2",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "AryaProfilesLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"folder": {
+			"name": "ToDelete/test_copy_Delta_table"
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobStorageLocation",
+				"folderPath": "linkuptest",
+				"container": "sampledata"
+			}
+		}
+	}
+}

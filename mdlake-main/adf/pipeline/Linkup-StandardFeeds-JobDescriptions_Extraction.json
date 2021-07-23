@@ -1,0 +1,100 @@
+{
+	"name": "Linkup-StandardFeeds-JobDescriptions_Extraction",
+	"properties": {
+		"activities": [
+			{
+				"name": "Copy data1_copy1",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "BinarySource",
+						"storeSettings": {
+							"type": "AzureBlobFSReadSettings",
+							"recursive": true
+						},
+						"formatSettings": {
+							"type": "BinaryReadSettings"
+						}
+					},
+					"sink": {
+						"type": "BinarySink",
+						"storeSettings": {
+							"type": "AzureBlobFSWriteSettings"
+						}
+					},
+					"enableStaging": false
+				},
+				"inputs": [
+					{
+						"referenceName": "Linkup_StandardFeeds_SinkExtract",
+						"type": "DatasetReference",
+						"parameters": {
+							"sinkfolder": {
+								"value": "@pipeline().parameters.sinkpath",
+								"type": "Expression"
+							},
+							"sinkfilename": {
+								"value": "@pipeline().parameters.descfname",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "Linkup_StandardFeeds_Sink",
+						"type": "DatasetReference",
+						"parameters": {
+							"sinkfolder": {
+								"value": "@string(pipeline().parameters.newsinkpath)",
+								"type": "Expression"
+							},
+							"sinkfilename": {
+								"value": "@substring(string(pipeline().parameters.descfname),0,34)",
+								"type": "Expression"
+							}
+						}
+					}
+				]
+			}
+		],
+		"parameters": {
+			"descpath": {
+				"type": "string",
+				"defaultValue": "JDE/Standard/Feeds/Raw Full Job Descriptions/2021/05/"
+			},
+			"sinkpath": {
+				"type": "string",
+				"defaultValue": "linkup_data/zip_data/StandardFeeds/"
+			},
+			"descfname": {
+				"type": "string",
+				"defaultValue": "linkup_job_descriptions_2021-05-31.tar.gz"
+			},
+			"newsinkpath": {
+				"type": "string",
+				"defaultValue": "linkup_data/zip_data/StandardFeeds/extracted"
+			}
+		},
+		"variables": {
+			"ListOfFiles": {
+				"type": "Array"
+			}
+		},
+		"folder": {
+			"name": "Tests-ToDeleteLater"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-07-01T13:27:02Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

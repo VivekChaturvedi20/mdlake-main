@@ -1,0 +1,22 @@
+{
+	"name": "S3GeographyDataSink",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "DataLakeLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"folder": {
+			"name": "S3GeographyDataDatasets"
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"folderPath": "s3datafiles/s3paydata",
+				"fileSystem": "dsml"
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

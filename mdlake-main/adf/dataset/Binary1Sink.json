@@ -1,0 +1,22 @@
+{
+	"name": "Binary1Sink",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "AryaProfilesLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"folder": {
+			"name": "ToDelete/TestBinaryZipExtractionDatasets"
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobStorageLocation",
+				"folderPath": "adfprocessedzips/extract",
+				"container": "sampledata"
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

@@ -1,0 +1,1066 @@
+{
+	"name": "DW-UAM-IncrementalAndFullDataProcessing",
+	"properties": {
+		"activities": [
+			{
+				"name": "configlookup",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderQuery": "select * from datalake.adfconf where enabled=1",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "ADFConfigSource",
+						"type": "DatasetReference"
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "dwfilter",
+				"type": "Filter",
+				"dependsOn": [
+					{
+						"activity": "configlookup",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('configlookup').output.value",
+						"type": "Expression"
+					},
+					"condition": {
+						"value": "@equals(item().Source,'sqldw')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "dwfilter",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('dwfilter').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "Check_Incremental_Flag",
+							"type": "IfCondition",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"expression": {
+									"value": "@bool(equals(item().Load_Flag,'Incremental'))",
+									"type": "Expression"
+								},
+								"ifFalseActivities": [
+									{
+										"name": "Copy Full Data",
+										"type": "Copy",
+										"dependsOn": [],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlMISource",
+												"sqlReaderQuery": {
+													"value": "SELECT * FROM @{item().Source_table}",
+													"type": "Expression"
+												},
+												"queryTimeout": "02:00:00",
+												"partitionOption": "None"
+											},
+											"sink": {
+												"type": "DelimitedTextSink",
+												"storeSettings": {
+													"type": "AzureBlobFSWriteSettings"
+												},
+												"formatSettings": {
+													"type": "DelimitedTextWriteSettings",
+													"quoteAllText": true,
+													"fileExtension": ".csv"
+												}
+											},
+											"enableStaging": false,
+											"translator": {
+												"type": "TabularTranslator",
+												"typeConversion": true,
+												"typeConversionSettings": {
+													"allowDataTruncation": true,
+													"treatBooleanAsNumber": false
+												}
+											}
+										},
+										"inputs": [
+											{
+												"referenceName": "DataWarehouseSource",
+												"type": "DatasetReference"
+											}
+										],
+										"outputs": [
+											{
+												"referenceName": "DataWarehouseSink",
+												"type": "DatasetReference",
+												"parameters": {
+													"STGfilename": "@{item().Dest_table}"
+												}
+											}
+										]
+									},
+									{
+										"name": "Logging_full",
+										"type": "Copy",
+										"dependsOn": [
+											{
+												"activity": "Copy Full Data",
+												"dependencyConditions": [
+													"Completed"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlMISource",
+												"sqlReaderQuery": {
+													"value": "SELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{pipeline().RunId}' as RunId,\n'@{item().Source_table}' as Source,\n'@{item().Dest_table}' as Destination,\n'@{item().Load_Flag}' as LoadType,\n'@{activity('Copy Full Data').output.executionDetails[0].status}' as Status,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('Copy Full Data').output.rowsCopied}' as rowsCopied,\n'@{activity('Copy Full Data').output.rowsRead}' as RowsRead,\n'@{activity('Copy Full Data').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('Copy Full Data').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('Copy Full Data').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('Copy Full Data').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('Copy Full Data').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('Copy Full Data').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('Copy Full Data').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('Copy Full Data').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('Copy Full Data').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('Copy Full Data').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs",
+													"type": "Expression"
+												},
+												"partitionOption": "None"
+											},
+											"sink": {
+												"type": "SqlMISink"
+											},
+											"enableStaging": false,
+											"translator": {
+												"type": "TabularTranslator",
+												"typeConversion": true,
+												"typeConversionSettings": {
+													"allowDataTruncation": true,
+													"treatBooleanAsNumber": false
+												}
+											}
+										},
+										"inputs": [
+											{
+												"referenceName": "ADFConfigSource",
+												"type": "DatasetReference"
+											}
+										],
+										"outputs": [
+											{
+												"referenceName": "LogTableDatalakeMI",
+												"type": "DatasetReference"
+											}
+										]
+									}
+								],
+								"ifTrueActivities": [
+									{
+										"name": "Get Last Modified date from config",
+										"type": "Lookup",
+										"dependsOn": [],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlMISource",
+												"sqlReaderQuery": {
+													"value": "select Watermark_Value As Watermark_Value from datalake.adfconf where Source_table like '@{item().Source_table}'",
+													"type": "Expression"
+												},
+												"partitionOption": "None"
+											},
+											"dataset": {
+												"referenceName": "ADFConfigSource",
+												"type": "DatasetReference"
+											},
+											"firstRowOnly": false
+										}
+									},
+									{
+										"name": "Copy Source to Datalake",
+										"type": "Copy",
+										"dependsOn": [
+											{
+												"activity": "Get Last Modified date from config",
+												"dependencyConditions": [
+													"Succeeded"
+												]
+											},
+											{
+												"activity": "get_max_modified_date",
+												"dependencyConditions": [
+													"Succeeded"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlMISource",
+												"sqlReaderQuery": {
+													"value": "\nSELECT * FROM @{item().Source_table}\nWHERE\n@{item().Watermark_Column} > \n\t'@{activity('Get Last Modified date from config').output.value[0].Watermark_Value}'\nand\n@{item().Watermark_Column} < '@{activity('get_max_modified_date').output.firstRow.NewWatermarkValue}'\n\t",
+													"type": "Expression"
+												},
+												"partitionOption": "None"
+											},
+											"sink": {
+												"type": "DelimitedTextSink",
+												"storeSettings": {
+													"type": "AzureBlobFSWriteSettings"
+												},
+												"formatSettings": {
+													"type": "DelimitedTextWriteSettings",
+													"quoteAllText": true,
+													"fileExtension": ".txt"
+												}
+											},
+											"enableStaging": false,
+											"translator": {
+												"type": "TabularTranslator",
+												"typeConversion": true,
+												"typeConversionSettings": {
+													"allowDataTruncation": true,
+													"treatBooleanAsNumber": false
+												}
+											}
+										},
+										"inputs": [
+											{
+												"referenceName": "DataWarehouseSource",
+												"type": "DatasetReference"
+											}
+										],
+										"outputs": [
+											{
+												"referenceName": "DataWarehouseSink",
+												"type": "DatasetReference",
+												"parameters": {
+													"STGfilename": "@{item().Dest_table}"
+												}
+											}
+										]
+									},
+									{
+										"name": "getwatermarkcolname",
+										"type": "Lookup",
+										"dependsOn": [],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlMISource",
+												"sqlReaderQuery": {
+													"value": "select Watermark_Column As watercol from datalake.adfconf where Source_table like '@{item().Source_table}'",
+													"type": "Expression"
+												},
+												"partitionOption": "None"
+											},
+											"dataset": {
+												"referenceName": "ADFConfigSource",
+												"type": "DatasetReference"
+											}
+										}
+									},
+									{
+										"name": "get_max_modified_date",
+										"type": "Lookup",
+										"dependsOn": [
+											{
+												"activity": "getwatermarkcolname",
+												"dependencyConditions": [
+													"Succeeded"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlMISource",
+												"sqlReaderQuery": {
+													"value": "select max(@{activity('getwatermarkcolname').output.firstRow.watercol}) As NewWatermarkValue from  @{item().Source_table}",
+													"type": "Expression"
+												},
+												"partitionOption": "None"
+											},
+											"dataset": {
+												"referenceName": "DataWarehouseSource",
+												"type": "DatasetReference"
+											}
+										}
+									},
+									{
+										"name": "UpdateWatermark",
+										"type": "SqlServerStoredProcedure",
+										"dependsOn": [
+											{
+												"activity": "Copy Source to Datalake",
+												"dependencyConditions": [
+													"Succeeded"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"storedProcedureName": "[datalake].[update_watermark]",
+											"storedProcedureParameters": {
+												"LastModifiedtime": {
+													"value": {
+														"value": "@activity('get_max_modified_date').output.firstRow.NewWatermarkValue",
+														"type": "Expression"
+													},
+													"type": "Datetime"
+												},
+												"TableName": {
+													"value": {
+														"value": "@{item().Source_table}",
+														"type": "Expression"
+													},
+													"type": "String"
+												}
+											}
+										},
+										"linkedServiceName": {
+											"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+											"type": "LinkedServiceReference"
+										}
+									},
+									{
+										"name": "Logging",
+										"type": "Copy",
+										"dependsOn": [
+											{
+												"activity": "Copy Source to Datalake",
+												"dependencyConditions": [
+													"Completed"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlMISource",
+												"sqlReaderQuery": {
+													"value": "SELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{pipeline().RunId}' as RunId,\n'@{item().Source_table}' as Source,\n'@{item().Dest_table}' as Destination,\n'@{item().Load_Flag}' as LoadType,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].status}' as Status,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('Copy Source to Datalake').output.rowsCopied}' as rowsCopied,\n'@{activity('Copy Source to Datalake').output.rowsRead}' as RowsRead,\n'@{activity('Copy Source to Datalake').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('Copy Source to Datalake').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('Copy Source to Datalake').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs",
+													"type": "Expression"
+												},
+												"partitionOption": "None"
+											},
+											"sink": {
+												"type": "SqlMISink"
+											},
+											"enableStaging": false,
+											"translator": {
+												"type": "TabularTranslator",
+												"typeConversion": true,
+												"typeConversionSettings": {
+													"allowDataTruncation": true,
+													"treatBooleanAsNumber": false
+												}
+											}
+										},
+										"inputs": [
+											{
+												"referenceName": "ADFConfigSource",
+												"type": "DatasetReference"
+											}
+										],
+										"outputs": [
+											{
+												"referenceName": "LogTableDatalakeMI",
+												"type": "DatasetReference"
+											}
+										]
+									}
+								]
+							}
+						},
+						{
+							"name": "UpdateSuccessStatus",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [
+								{
+									"activity": "Check_Incremental_Flag",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[datalake].[update_status]",
+								"storedProcedureParameters": {
+									"Status": {
+										"value": "Successful",
+										"type": "String"
+									},
+									"TableName": {
+										"value": {
+											"value": "@{item().Source_table}",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+								"type": "LinkedServiceReference"
+							}
+						},
+						{
+							"name": "UpdateFailedStatus",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [
+								{
+									"activity": "Check_Incremental_Flag",
+									"dependencyConditions": [
+										"Failed"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[datalake].[update_status]",
+								"storedProcedureParameters": {
+									"Status": {
+										"value": "Failed",
+										"type": "String"
+									},
+									"TableName": {
+										"value": {
+											"value": "@{item().Source_table}",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+								"type": "LinkedServiceReference"
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "uamfilter",
+				"type": "Filter",
+				"dependsOn": [
+					{
+						"activity": "configlookup",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('configlookup').output.value",
+						"type": "Expression"
+					},
+					"condition": {
+						"value": "@equals(item().Source,'sqluam')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "ForEach2",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "uamfilter",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('uamfilter').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "Check_Incremental_Flag_uam",
+							"type": "IfCondition",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"expression": {
+									"value": "@bool(equals(item().Load_Flag,'Incremental'))",
+									"type": "Expression"
+								},
+								"ifFalseActivities": [
+									{
+										"name": "Copy Full Data_uam",
+										"type": "Copy",
+										"dependsOn": [],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlMISource",
+												"sqlReaderQuery": {
+													"value": "SELECT * FROM @{item().Source_table}",
+													"type": "Expression"
+												},
+												"queryTimeout": "02:00:00",
+												"partitionOption": "None"
+											},
+											"sink": {
+												"type": "DelimitedTextSink",
+												"storeSettings": {
+													"type": "AzureBlobFSWriteSettings"
+												},
+												"formatSettings": {
+													"type": "DelimitedTextWriteSettings",
+													"quoteAllText": true,
+													"fileExtension": ".csv"
+												}
+											},
+											"enableStaging": false,
+											"translator": {
+												"type": "TabularTranslator",
+												"typeConversion": true,
+												"typeConversionSettings": {
+													"allowDataTruncation": true,
+													"treatBooleanAsNumber": false
+												}
+											}
+										},
+										"inputs": [
+											{
+												"referenceName": "UAMSource",
+												"type": "DatasetReference"
+											}
+										],
+										"outputs": [
+											{
+												"referenceName": "UAMSink",
+												"type": "DatasetReference",
+												"parameters": {
+													"STGfilename": "@{item().Dest_table}"
+												}
+											}
+										]
+									},
+									{
+										"name": "Logging_full_uam",
+										"type": "Copy",
+										"dependsOn": [
+											{
+												"activity": "Copy Full Data_uam",
+												"dependencyConditions": [
+													"Completed"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlMISource",
+												"sqlReaderQuery": {
+													"value": "SELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{pipeline().RunId}' as RunId,\n'@{item().Source_table}' as Source,\n'@{item().Dest_table}' as Destination,\n'@{item().Load_Flag}' as LoadType,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].status}' as Status,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('Copy Full Data_uam').output.rowsCopied}' as rowsCopied,\n'@{activity('Copy Full Data_uam').output.rowsRead}' as RowsRead,\n'@{activity('Copy Full Data_uam').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('Copy Full Data_uam').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('Copy Full Data_uam').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs",
+													"type": "Expression"
+												},
+												"partitionOption": "None"
+											},
+											"sink": {
+												"type": "SqlMISink"
+											},
+											"enableStaging": false,
+											"translator": {
+												"type": "TabularTranslator",
+												"typeConversion": true,
+												"typeConversionSettings": {
+													"allowDataTruncation": true,
+													"treatBooleanAsNumber": false
+												}
+											}
+										},
+										"inputs": [
+											{
+												"referenceName": "ADFConfigSource",
+												"type": "DatasetReference"
+											}
+										],
+										"outputs": [
+											{
+												"referenceName": "LogTableDatalakeMI",
+												"type": "DatasetReference"
+											}
+										]
+									}
+								],
+								"ifTrueActivities": [
+									{
+										"name": "Get Last Modified date from config_uam",
+										"type": "Lookup",
+										"dependsOn": [],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlMISource",
+												"sqlReaderQuery": {
+													"value": "select Watermark_Value As Watermark_Value from datalake.adfconf where Source_table like '@{item().Source_table}'",
+													"type": "Expression"
+												},
+												"partitionOption": "None"
+											},
+											"dataset": {
+												"referenceName": "ADFConfigSource",
+												"type": "DatasetReference"
+											},
+											"firstRowOnly": false
+										}
+									},
+									{
+										"name": "Copy Source to Datalake_uam",
+										"type": "Copy",
+										"dependsOn": [
+											{
+												"activity": "Get Last Modified date from config_uam",
+												"dependencyConditions": [
+													"Succeeded"
+												]
+											},
+											{
+												"activity": "get_max_modified_date_uam",
+												"dependencyConditions": [
+													"Succeeded"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlMISource",
+												"sqlReaderQuery": {
+													"value": "\nSELECT * FROM @{item().Source_table}\nWHERE\n@{item().Watermark_Column} > \n\t'@{activity('Get Last Modified date from config_uam').output.value[0].Watermark_Value}'\nand\n@{item().Watermark_Column} < '@{activity('get_max_modified_date_uam').output.firstRow.NewWatermarkValue}'\n\t",
+													"type": "Expression"
+												},
+												"partitionOption": "None"
+											},
+											"sink": {
+												"type": "DelimitedTextSink",
+												"storeSettings": {
+													"type": "AzureBlobFSWriteSettings"
+												},
+												"formatSettings": {
+													"type": "DelimitedTextWriteSettings",
+													"quoteAllText": true,
+													"fileExtension": ".txt"
+												}
+											},
+											"enableStaging": false,
+											"translator": {
+												"type": "TabularTranslator",
+												"typeConversion": true,
+												"typeConversionSettings": {
+													"allowDataTruncation": true,
+													"treatBooleanAsNumber": false
+												}
+											}
+										},
+										"inputs": [
+											{
+												"referenceName": "UAMSource",
+												"type": "DatasetReference"
+											}
+										],
+										"outputs": [
+											{
+												"referenceName": "UAMSink",
+												"type": "DatasetReference",
+												"parameters": {
+													"STGfilename": "@{item().Dest_table}"
+												}
+											}
+										]
+									},
+									{
+										"name": "getwatermarkcolnameuam",
+										"type": "Lookup",
+										"dependsOn": [],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlMISource",
+												"sqlReaderQuery": {
+													"value": "select Watermark_Column As watercol from datalake.adfconf where Source_table like '@{item().Source_table}'",
+													"type": "Expression"
+												},
+												"partitionOption": "None"
+											},
+											"dataset": {
+												"referenceName": "ADFConfigSource",
+												"type": "DatasetReference"
+											}
+										}
+									},
+									{
+										"name": "get_max_modified_date_uam",
+										"type": "Lookup",
+										"dependsOn": [
+											{
+												"activity": "getwatermarkcolnameuam",
+												"dependencyConditions": [
+													"Succeeded"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlMISource",
+												"sqlReaderQuery": {
+													"value": "select max(@{activity('getwatermarkcolnameuam').output.firstRow.watercol}) As NewWatermarkValue from  @{item().Source_table}",
+													"type": "Expression"
+												},
+												"partitionOption": "None"
+											},
+											"dataset": {
+												"referenceName": "UAMSource",
+												"type": "DatasetReference"
+											}
+										}
+									},
+									{
+										"name": "UpdateWatermark_uam",
+										"type": "SqlServerStoredProcedure",
+										"dependsOn": [
+											{
+												"activity": "Copy Source to Datalake_uam",
+												"dependencyConditions": [
+													"Succeeded"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"storedProcedureName": "[datalake].[update_watermark]",
+											"storedProcedureParameters": {
+												"LastModifiedtime": {
+													"value": {
+														"value": "@activity('get_max_modified_date_uam').output.firstRow.NewWatermarkValue",
+														"type": "Expression"
+													},
+													"type": "Datetime"
+												},
+												"TableName": {
+													"value": {
+														"value": "@{item().Source_table}",
+														"type": "Expression"
+													},
+													"type": "String"
+												}
+											}
+										},
+										"linkedServiceName": {
+											"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+											"type": "LinkedServiceReference"
+										}
+									},
+									{
+										"name": "Logging_uam",
+										"type": "Copy",
+										"dependsOn": [
+											{
+												"activity": "Copy Source to Datalake_uam",
+												"dependencyConditions": [
+													"Completed"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlMISource",
+												"sqlReaderQuery": {
+													"value": "SELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{pipeline().RunId}' as RunId,\n'@{item().Source_table}' as Source,\n'@{item().Dest_table}' as Destination,\n'@{item().Load_Flag}' as LoadType,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].status}' as Status,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('Copy Source to Datalake_uam').output.rowsCopied}' as rowsCopied,\n'@{activity('Copy Source to Datalake_uam').output.rowsRead}' as RowsRead,\n'@{activity('Copy Source to Datalake_uam').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('Copy Source to Datalake_uam').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('Copy Source to Datalake_uam').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs",
+													"type": "Expression"
+												},
+												"partitionOption": "None"
+											},
+											"sink": {
+												"type": "SqlMISink"
+											},
+											"enableStaging": false,
+											"translator": {
+												"type": "TabularTranslator",
+												"typeConversion": true,
+												"typeConversionSettings": {
+													"allowDataTruncation": true,
+													"treatBooleanAsNumber": false
+												}
+											}
+										},
+										"inputs": [
+											{
+												"referenceName": "ADFConfigSource",
+												"type": "DatasetReference"
+											}
+										],
+										"outputs": [
+											{
+												"referenceName": "LogTableDatalakeMI",
+												"type": "DatasetReference"
+											}
+										]
+									}
+								]
+							}
+						},
+						{
+							"name": "UpdateSuccessStatus_uam",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [
+								{
+									"activity": "Check_Incremental_Flag_uam",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[datalake].[update_status]",
+								"storedProcedureParameters": {
+									"Status": {
+										"value": "Successful",
+										"type": "String"
+									},
+									"TableName": {
+										"value": {
+											"value": "@{item().Source_table}",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+								"type": "LinkedServiceReference"
+							}
+						},
+						{
+							"name": "UpdateFailedStatus_uam",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [
+								{
+									"activity": "Check_Incremental_Flag_uam",
+									"dependencyConditions": [
+										"Failed"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[datalake].[update_status]",
+								"storedProcedureParameters": {
+									"Status": {
+										"value": "Failed",
+										"type": "String"
+									},
+									"TableName": {
+										"value": {
+											"value": "@{item().Source_table}",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+								"type": "LinkedServiceReference"
+							}
+						}
+					]
+				}
+			}
+		],
+		"variables": {
+			"dw_watermarktab": {
+				"type": "String"
+			},
+			"uam_watermarktab": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "DW-UAM"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-07-01T13:27:02Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

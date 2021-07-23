@@ -1,0 +1,21 @@
+{
+	"name": "Binary2_copy1",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "DataLakeLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"folder": {
+			"name": "ToDelete/test_copy_Delta_table"
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"folderPath": "linkup_data/zip_data/StandardFeeds/test2",
+				"fileSystem": "dsml"
+			}
+		}
+	}
+}

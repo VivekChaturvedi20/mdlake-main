@@ -1,0 +1,20 @@
+{
+	"name": "ADFConfigSource_OLD",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "AzureSQLManagedInstaceLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"folder": {
+			"name": "ManagedSQLInstanceDatasets"
+		},
+		"annotations": [],
+		"type": "AzureSqlMITable",
+		"schema": [],
+		"typeProperties": {
+			"schema": "datalake",
+			"table": "adfconf"
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

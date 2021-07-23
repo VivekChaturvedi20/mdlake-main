@@ -1,0 +1,21 @@
+{
+	"name": "S3GeographyDataSource",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "AmazonS3LinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"folder": {
+			"name": "S3GeographyDataDatasets"
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "AmazonS3Location",
+				"bucketName": "datafiles.translated.for.ai"
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

@@ -1,0 +1,37 @@
+{
+	"name": "Linkup_Diff_Sink",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "DataLakeLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"sinkfilename": {
+				"type": "string"
+			},
+			"sinkfolder": {
+				"type": "string"
+			}
+		},
+		"folder": {
+			"name": "LinkupDatasets"
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": {
+					"value": "@dataset().sinkfilename",
+					"type": "Expression"
+				},
+				"folderPath": {
+					"value": "@dataset().sinkfolder",
+					"type": "Expression"
+				},
+				"fileSystem": "dsml"
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

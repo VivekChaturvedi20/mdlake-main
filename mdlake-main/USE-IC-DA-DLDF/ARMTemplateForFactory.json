@@ -1,0 +1,6104 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "USE-IC-DA-DLDF"
+		},
+		"AmazonS3LinkedService_secretAccessKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'secretAccessKey' of 'AmazonS3LinkedService'"
+		},
+		"AryaProfilesLinkedService_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'AryaProfilesLinkedService'"
+		},
+		"AzureDatabricksDeltaLakeLinkedService_accessToken": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accessToken' of 'AzureDatabricksDeltaLakeLinkedService'"
+		},
+		"AzureDatabricksLinkedService_accessToken": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accessToken' of 'AzureDatabricksLinkedService'"
+		},
+		"AzureSQLMI_UAM_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'AzureSQLMI_UAM'"
+		},
+		"AzureSQLManagedInstaceLinkedService_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'AzureSQLManagedInstaceLinkedService'"
+		},
+		"DataLakeLinkedService_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'DataLakeLinkedService'"
+		},
+		"Sftp_LinkupLinkedService_password": {
+			"type": "secureString",
+			"metadata": "Secure string for 'password' of 'Sftp_LinkupLinkedService'"
+		},
+		"adfconfig_sqlmi_public_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'adfconfig_sqlmi_public'"
+		},
+		"adfconfig_sqlmi_selfhostedLinkedService_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'adfconfig_sqlmi_selfhostedLinkedService'"
+		},
+		"datawarehouse_sqlmi_selhostedLinkedService_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'datawarehouse_sqlmi_selhostedLinkedService'"
+		},
+		"sqlbackupblobLinkedService_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'sqlbackupblobLinkedService'"
+		},
+		"uam_sqlmi_selfhostedLinkedService_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'uam_sqlmi_selfhostedLinkedService'"
+		},
+		"AmazonS3LinkedService_properties_typeProperties_accessKeyId": {
+			"type": "string",
+			"defaultValue": "AKIAT3WSGVATGOFFU53C"
+		},
+		"AzureKeyVaultLinkedService_properties_typeProperties_baseUrl": {
+			"type": "string",
+			"defaultValue": "https://sqlmi-keyvault.vault.azure.net/"
+		},
+		"DataLakeLinkedService_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://dsmldevsa.dfs.core.windows.net"
+		},
+		"Sftp_LinkupLinkedService_properties_typeProperties_host": {
+			"type": "string",
+			"defaultValue": "files.linkup.com"
+		},
+		"Sftp_LinkupLinkedService_properties_typeProperties_userName": {
+			"type": "string",
+			"defaultValue": "Korn.Ferry"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/DW-UAM-Data-Extraction-incremental')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "configlookup",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "SqlMISource",
+								"sqlReaderQuery": "select * from datalake.adfconf where enabled=1",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "ADFConfigSource",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "dwfilter",
+						"type": "Filter",
+						"dependsOn": [
+							{
+								"activity": "configlookup",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('configlookup').output.value",
+								"type": "Expression"
+							},
+							"condition": {
+								"value": "@equals(item().Source,'sqldw')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "dwfilter",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('dwfilter').output.value",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Check_Incremental_Flag",
+									"type": "IfCondition",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"expression": {
+											"value": "@bool(equals(item().Load_Flag,'Incremental'))",
+											"type": "Expression"
+										},
+										"ifFalseActivities": [
+											{
+												"name": "Copy Full Data to ADLS Gen 2",
+												"type": "Copy",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "SELECT * FROM @{item().Source_table}",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"sink": {
+														"type": "DelimitedTextSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "DelimitedTextWriteSettings",
+															"quoteAllText": true,
+															"fileExtension": ".csv"
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "DataWarehouseSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "DataWarehouseSink",
+														"type": "DatasetReference",
+														"parameters": {
+															"STGfilename": "@{item().Dest_table}"
+														}
+													}
+												]
+											}
+										],
+										"ifTrueActivities": [
+											{
+												"name": "Get Last Modified date from config",
+												"type": "Lookup",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "select Watermark_Value from datalake.adfconf where Source_table like '@{item().Source_table}'",
+															"type": "Expression"
+														},
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "ADFConfigSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													},
+													"firstRowOnly": false
+												}
+											},
+											{
+												"name": "Copy Source to Datalake",
+												"type": "Copy",
+												"dependsOn": [
+													{
+														"activity": "Get Last Modified date from config",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "SELECT * FROM @{item().Source_table}\nWHERE\nConvert(datetime,@{item().Watermark_Column},105) \n > \nConvert(datetime,substring(\nreplace(\n@{activity('Get Last Modified date from config').output.firstRow.Watermark_Value},'T',''),0,20),120)",
+															"type": "Expression"
+														},
+														"partitionOption": "None"
+													},
+													"sink": {
+														"type": "DelimitedTextSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "DelimitedTextWriteSettings",
+															"quoteAllText": true,
+															"fileExtension": ".txt"
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "DataWarehouseSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "DataWarehouseSink",
+														"type": "DatasetReference",
+														"parameters": {
+															"STGfilename": "@{item().Dest_table}"
+														}
+													}
+												]
+											},
+											{
+												"name": "Data flow1",
+												"type": "ExecuteDataFlow",
+												"dependsOn": [
+													{
+														"activity": "Copy Source to Datalake",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "1.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"dataflow": {
+														"referenceName": "dataflow1",
+														"type": "DataFlowReference",
+														"parameters": {
+															"sourcetable": {
+																"value": "'@{item().Dest_table}'",
+																"type": "Expression"
+															},
+															"watermark_field": {
+																"value": "'@{item().Watermark_Column}'",
+																"type": "Expression"
+															}
+														},
+														"datasetParameters": {
+															"source1": {
+																"STGfilename": "@{item().Dest_table}"
+															},
+															"sink1": {}
+														}
+													},
+													"staging": {},
+													"compute": {
+														"coreCount": 8,
+														"computeType": "General"
+													},
+													"traceLevel": "Fine"
+												}
+											}
+										]
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "uamfilter",
+						"type": "Filter",
+						"dependsOn": [
+							{
+								"activity": "configlookup",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('configlookup').output.value",
+								"type": "Expression"
+							},
+							"condition": {
+								"value": "@equals(item().Source,'sqluam')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "ForEach2",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "uamfilter",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('uamfilter').output.value",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "If Condition1",
+									"type": "IfCondition",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"expression": {
+											"value": "@bool(equals(item().Load_Flag,'Incremental'))",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"folder": {
+					"name": "Tests-ToDeleteLater"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:02Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/ADFConfigSource')]",
+				"[concat(variables('factoryId'), '/datasets/DataWarehouseSource')]",
+				"[concat(variables('factoryId'), '/datasets/DataWarehouseSink')]",
+				"[concat(variables('factoryId'), '/dataflows/dataflow1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DW-UAM-Data-Extraction_OnlyFullDataProcessing')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "Note - This pipeline only processes full data files. So the input config table must have the Load_Flag as full, those only will be processed by this pipeline.\n",
+				"activities": [
+					{
+						"name": "configlookup",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "SqlMISource",
+								"sqlReaderQuery": "select * from datalake.adfconf where enabled=1",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "ADFConfigSource",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "dwfilter",
+						"type": "Filter",
+						"dependsOn": [
+							{
+								"activity": "configlookup",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('configlookup').output.value",
+								"type": "Expression"
+							},
+							"condition": {
+								"value": "@equals(item().Source,'sqldw')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "dwfilter",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('dwfilter').output.value",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Check_Incremental_Flag",
+									"type": "IfCondition",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"expression": {
+											"value": "@bool(equals(item().Load_Flag,'Incremental'))",
+											"type": "Expression"
+										},
+										"ifFalseActivities": [
+											{
+												"name": "Copy Full Data to ADLS Gen 2",
+												"type": "Copy",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "SELECT * FROM @{item().Source_table}",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"sink": {
+														"type": "DelimitedTextSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "DelimitedTextWriteSettings",
+															"quoteAllText": true,
+															"fileExtension": ".csv"
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "DataWarehouseSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "DataWarehouseSink",
+														"type": "DatasetReference",
+														"parameters": {
+															"STGfilename": "@{item().Dest_table}"
+														}
+													}
+												]
+											}
+										]
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "uamfilter",
+						"type": "Filter",
+						"dependsOn": [
+							{
+								"activity": "configlookup",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('configlookup').output.value",
+								"type": "Expression"
+							},
+							"condition": {
+								"value": "@equals(item().Source,'sqluam')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "ForEach2",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "uamfilter",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('uamfilter').output.value",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Check_Incremental_Flag_copy1",
+									"type": "IfCondition",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"expression": {
+											"value": "@bool(equals(item().Load_Flag,'Incremental'))",
+											"type": "Expression"
+										},
+										"ifFalseActivities": [
+											{
+												"name": "Copy Full Data to ADLS Gen 2_copy1",
+												"type": "Copy",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "SELECT * FROM @{item().Source_table}",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"sink": {
+														"type": "DelimitedTextSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "DelimitedTextWriteSettings",
+															"quoteAllText": true,
+															"fileExtension": ".csv"
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "UAMSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "UAMSink",
+														"type": "DatasetReference",
+														"parameters": {
+															"STGfilename": "@{item().Dest_table}"
+														}
+													}
+												]
+											}
+										]
+									}
+								}
+							]
+						}
+					}
+				],
+				"folder": {
+					"name": "DW-UAM"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:01Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/ADFConfigSource')]",
+				"[concat(variables('factoryId'), '/datasets/DataWarehouseSource')]",
+				"[concat(variables('factoryId'), '/datasets/DataWarehouseSink')]",
+				"[concat(variables('factoryId'), '/datasets/UAMSource')]",
+				"[concat(variables('factoryId'), '/datasets/UAMSink')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DW-UAM-Databricks-Ingestion')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "DW-UAM-Incremental-Ingest",
+						"type": "DatabricksNotebook",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"notebookPath": "/Shared/uam_datawarehouse/Ingest-DW-UAM-Data-Incremental"
+						},
+						"linkedServiceName": {
+							"referenceName": "AzureDatabricksLinkedService",
+							"type": "LinkedServiceReference"
+						}
+					}
+				],
+				"folder": {
+					"name": "DW-UAM"
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AzureDatabricksLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DW-UAM-FullPipeline')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "DW-UAM-incrementalnew",
+						"type": "ExecutePipeline",
+						"dependsOn": [],
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "DW-UAM-IncrementalAndFullDataProcessing",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "DW-UAM-Databricks-Ingestion",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "DW-UAM-incrementalnew",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "DW-UAM-Databricks-Ingestion",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					}
+				],
+				"folder": {
+					"name": "DW-UAM"
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/pipelines/DW-UAM-IncrementalAndFullDataProcessing')]",
+				"[concat(variables('factoryId'), '/pipelines/DW-UAM-Databricks-Ingestion')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DW-UAM-IncrementalAndFullDataProcessing')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "configlookup",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "SqlMISource",
+								"sqlReaderQuery": "select * from datalake.adfconf where enabled=1",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "ADFConfigSource",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "dwfilter",
+						"type": "Filter",
+						"dependsOn": [
+							{
+								"activity": "configlookup",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('configlookup').output.value",
+								"type": "Expression"
+							},
+							"condition": {
+								"value": "@equals(item().Source,'sqldw')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "dwfilter",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('dwfilter').output.value",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Check_Incremental_Flag",
+									"type": "IfCondition",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"expression": {
+											"value": "@bool(equals(item().Load_Flag,'Incremental'))",
+											"type": "Expression"
+										},
+										"ifFalseActivities": [
+											{
+												"name": "Copy Full Data",
+												"type": "Copy",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "SELECT * FROM @{item().Source_table}",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"sink": {
+														"type": "DelimitedTextSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "DelimitedTextWriteSettings",
+															"quoteAllText": true,
+															"fileExtension": ".csv"
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "DataWarehouseSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "DataWarehouseSink",
+														"type": "DatasetReference",
+														"parameters": {
+															"STGfilename": "@{item().Dest_table}"
+														}
+													}
+												]
+											},
+											{
+												"name": "Logging_full",
+												"type": "Copy",
+												"dependsOn": [
+													{
+														"activity": "Copy Full Data",
+														"dependencyConditions": [
+															"Completed"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "SELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{pipeline().RunId}' as RunId,\n'@{item().Source_table}' as Source,\n'@{item().Dest_table}' as Destination,\n'@{item().Load_Flag}' as LoadType,\n'@{activity('Copy Full Data').output.executionDetails[0].status}' as Status,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('Copy Full Data').output.rowsCopied}' as rowsCopied,\n'@{activity('Copy Full Data').output.rowsRead}' as RowsRead,\n'@{activity('Copy Full Data').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('Copy Full Data').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('Copy Full Data').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('Copy Full Data').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('Copy Full Data').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('Copy Full Data').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('Copy Full Data').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('Copy Full Data').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('Copy Full Data').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('Copy Full Data').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs",
+															"type": "Expression"
+														},
+														"partitionOption": "None"
+													},
+													"sink": {
+														"type": "SqlMISink"
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "ADFConfigSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "LogTableDatalakeMI",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												]
+											}
+										],
+										"ifTrueActivities": [
+											{
+												"name": "Get Last Modified date from config",
+												"type": "Lookup",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "select Watermark_Value As Watermark_Value from datalake.adfconf where Source_table like '@{item().Source_table}'",
+															"type": "Expression"
+														},
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "ADFConfigSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													},
+													"firstRowOnly": false
+												}
+											},
+											{
+												"name": "Copy Source to Datalake",
+												"type": "Copy",
+												"dependsOn": [
+													{
+														"activity": "Get Last Modified date from config",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													},
+													{
+														"activity": "get_max_modified_date",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "\nSELECT * FROM @{item().Source_table}\nWHERE\n@{item().Watermark_Column} > \n\t'@{activity('Get Last Modified date from config').output.value[0].Watermark_Value}'\nand\n@{item().Watermark_Column} < '@{activity('get_max_modified_date').output.firstRow.NewWatermarkValue}'\n\t",
+															"type": "Expression"
+														},
+														"partitionOption": "None"
+													},
+													"sink": {
+														"type": "DelimitedTextSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "DelimitedTextWriteSettings",
+															"quoteAllText": true,
+															"fileExtension": ".txt"
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "DataWarehouseSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "DataWarehouseSink",
+														"type": "DatasetReference",
+														"parameters": {
+															"STGfilename": "@{item().Dest_table}"
+														}
+													}
+												]
+											},
+											{
+												"name": "getwatermarkcolname",
+												"type": "Lookup",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "select Watermark_Column As watercol from datalake.adfconf where Source_table like '@{item().Source_table}'",
+															"type": "Expression"
+														},
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "ADFConfigSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												}
+											},
+											{
+												"name": "get_max_modified_date",
+												"type": "Lookup",
+												"dependsOn": [
+													{
+														"activity": "getwatermarkcolname",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "select max(@{activity('getwatermarkcolname').output.firstRow.watercol}) As NewWatermarkValue from  @{item().Source_table}",
+															"type": "Expression"
+														},
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "DataWarehouseSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												}
+											},
+											{
+												"name": "UpdateWatermark",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [
+													{
+														"activity": "Copy Source to Datalake",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[[datalake].[update_watermark]",
+													"storedProcedureParameters": {
+														"LastModifiedtime": {
+															"value": {
+																"value": "@activity('get_max_modified_date').output.firstRow.NewWatermarkValue",
+																"type": "Expression"
+															},
+															"type": "Datetime"
+														},
+														"TableName": {
+															"value": {
+																"value": "@{item().Source_table}",
+																"type": "Expression"
+															},
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+													"type": "LinkedServiceReference"
+												}
+											},
+											{
+												"name": "Logging",
+												"type": "Copy",
+												"dependsOn": [
+													{
+														"activity": "Copy Source to Datalake",
+														"dependencyConditions": [
+															"Completed"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "SELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{pipeline().RunId}' as RunId,\n'@{item().Source_table}' as Source,\n'@{item().Dest_table}' as Destination,\n'@{item().Load_Flag}' as LoadType,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].status}' as Status,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('Copy Source to Datalake').output.rowsCopied}' as rowsCopied,\n'@{activity('Copy Source to Datalake').output.rowsRead}' as RowsRead,\n'@{activity('Copy Source to Datalake').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('Copy Source to Datalake').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('Copy Source to Datalake').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('Copy Source to Datalake').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs",
+															"type": "Expression"
+														},
+														"partitionOption": "None"
+													},
+													"sink": {
+														"type": "SqlMISink"
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "ADFConfigSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "LogTableDatalakeMI",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												]
+											}
+										]
+									}
+								},
+								{
+									"name": "UpdateSuccessStatus",
+									"type": "SqlServerStoredProcedure",
+									"dependsOn": [
+										{
+											"activity": "Check_Incremental_Flag",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"storedProcedureName": "[[datalake].[update_status]",
+										"storedProcedureParameters": {
+											"Status": {
+												"value": "Successful",
+												"type": "String"
+											},
+											"TableName": {
+												"value": {
+													"value": "@{item().Source_table}",
+													"type": "Expression"
+												},
+												"type": "String"
+											}
+										}
+									},
+									"linkedServiceName": {
+										"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+										"type": "LinkedServiceReference"
+									}
+								},
+								{
+									"name": "UpdateFailedStatus",
+									"type": "SqlServerStoredProcedure",
+									"dependsOn": [
+										{
+											"activity": "Check_Incremental_Flag",
+											"dependencyConditions": [
+												"Failed"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"storedProcedureName": "[[datalake].[update_status]",
+										"storedProcedureParameters": {
+											"Status": {
+												"value": "Failed",
+												"type": "String"
+											},
+											"TableName": {
+												"value": {
+													"value": "@{item().Source_table}",
+													"type": "Expression"
+												},
+												"type": "String"
+											}
+										}
+									},
+									"linkedServiceName": {
+										"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+										"type": "LinkedServiceReference"
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "uamfilter",
+						"type": "Filter",
+						"dependsOn": [
+							{
+								"activity": "configlookup",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('configlookup').output.value",
+								"type": "Expression"
+							},
+							"condition": {
+								"value": "@equals(item().Source,'sqluam')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "ForEach2",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "uamfilter",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('uamfilter').output.value",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Check_Incremental_Flag_uam",
+									"type": "IfCondition",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"expression": {
+											"value": "@bool(equals(item().Load_Flag,'Incremental'))",
+											"type": "Expression"
+										},
+										"ifFalseActivities": [
+											{
+												"name": "Copy Full Data_uam",
+												"type": "Copy",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "SELECT * FROM @{item().Source_table}",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"sink": {
+														"type": "DelimitedTextSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "DelimitedTextWriteSettings",
+															"quoteAllText": true,
+															"fileExtension": ".csv"
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "UAMSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "UAMSink",
+														"type": "DatasetReference",
+														"parameters": {
+															"STGfilename": "@{item().Dest_table}"
+														}
+													}
+												]
+											},
+											{
+												"name": "Logging_full_uam",
+												"type": "Copy",
+												"dependsOn": [
+													{
+														"activity": "Copy Full Data_uam",
+														"dependencyConditions": [
+															"Completed"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "SELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{pipeline().RunId}' as RunId,\n'@{item().Source_table}' as Source,\n'@{item().Dest_table}' as Destination,\n'@{item().Load_Flag}' as LoadType,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].status}' as Status,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('Copy Full Data_uam').output.rowsCopied}' as rowsCopied,\n'@{activity('Copy Full Data_uam').output.rowsRead}' as RowsRead,\n'@{activity('Copy Full Data_uam').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('Copy Full Data_uam').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('Copy Full Data_uam').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('Copy Full Data_uam').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs",
+															"type": "Expression"
+														},
+														"partitionOption": "None"
+													},
+													"sink": {
+														"type": "SqlMISink"
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "ADFConfigSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "LogTableDatalakeMI",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												]
+											}
+										],
+										"ifTrueActivities": [
+											{
+												"name": "Get Last Modified date from config_uam",
+												"type": "Lookup",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "select Watermark_Value As Watermark_Value from datalake.adfconf where Source_table like '@{item().Source_table}'",
+															"type": "Expression"
+														},
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "ADFConfigSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													},
+													"firstRowOnly": false
+												}
+											},
+											{
+												"name": "Copy Source to Datalake_uam",
+												"type": "Copy",
+												"dependsOn": [
+													{
+														"activity": "Get Last Modified date from config_uam",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													},
+													{
+														"activity": "get_max_modified_date_uam",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "\nSELECT * FROM @{item().Source_table}\nWHERE\n@{item().Watermark_Column} > \n\t'@{activity('Get Last Modified date from config_uam').output.value[0].Watermark_Value}'\nand\n@{item().Watermark_Column} < '@{activity('get_max_modified_date_uam').output.firstRow.NewWatermarkValue}'\n\t",
+															"type": "Expression"
+														},
+														"partitionOption": "None"
+													},
+													"sink": {
+														"type": "DelimitedTextSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "DelimitedTextWriteSettings",
+															"quoteAllText": true,
+															"fileExtension": ".txt"
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "UAMSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "UAMSink",
+														"type": "DatasetReference",
+														"parameters": {
+															"STGfilename": "@{item().Dest_table}"
+														}
+													}
+												]
+											},
+											{
+												"name": "getwatermarkcolnameuam",
+												"type": "Lookup",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "select Watermark_Column As watercol from datalake.adfconf where Source_table like '@{item().Source_table}'",
+															"type": "Expression"
+														},
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "ADFConfigSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												}
+											},
+											{
+												"name": "get_max_modified_date_uam",
+												"type": "Lookup",
+												"dependsOn": [
+													{
+														"activity": "getwatermarkcolnameuam",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "select max(@{activity('getwatermarkcolnameuam').output.firstRow.watercol}) As NewWatermarkValue from  @{item().Source_table}",
+															"type": "Expression"
+														},
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "UAMSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												}
+											},
+											{
+												"name": "UpdateWatermark_uam",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [
+													{
+														"activity": "Copy Source to Datalake_uam",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[[datalake].[update_watermark]",
+													"storedProcedureParameters": {
+														"LastModifiedtime": {
+															"value": {
+																"value": "@activity('get_max_modified_date_uam').output.firstRow.NewWatermarkValue",
+																"type": "Expression"
+															},
+															"type": "Datetime"
+														},
+														"TableName": {
+															"value": {
+																"value": "@{item().Source_table}",
+																"type": "Expression"
+															},
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+													"type": "LinkedServiceReference"
+												}
+											},
+											{
+												"name": "Logging_uam",
+												"type": "Copy",
+												"dependsOn": [
+													{
+														"activity": "Copy Source to Datalake_uam",
+														"dependencyConditions": [
+															"Completed"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "SqlMISource",
+														"sqlReaderQuery": {
+															"value": "SELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{pipeline().RunId}' as RunId,\n'@{item().Source_table}' as Source,\n'@{item().Dest_table}' as Destination,\n'@{item().Load_Flag}' as LoadType,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].status}' as Status,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('Copy Source to Datalake_uam').output.rowsCopied}' as rowsCopied,\n'@{activity('Copy Source to Datalake_uam').output.rowsRead}' as RowsRead,\n'@{activity('Copy Source to Datalake_uam').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('Copy Source to Datalake_uam').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('Copy Source to Datalake_uam').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('Copy Source to Datalake_uam').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs",
+															"type": "Expression"
+														},
+														"partitionOption": "None"
+													},
+													"sink": {
+														"type": "SqlMISink"
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "ADFConfigSource",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "LogTableDatalakeMI",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												]
+											}
+										]
+									}
+								},
+								{
+									"name": "UpdateSuccessStatus_uam",
+									"type": "SqlServerStoredProcedure",
+									"dependsOn": [
+										{
+											"activity": "Check_Incremental_Flag_uam",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"storedProcedureName": "[[datalake].[update_status]",
+										"storedProcedureParameters": {
+											"Status": {
+												"value": "Successful",
+												"type": "String"
+											},
+											"TableName": {
+												"value": {
+													"value": "@{item().Source_table}",
+													"type": "Expression"
+												},
+												"type": "String"
+											}
+										}
+									},
+									"linkedServiceName": {
+										"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+										"type": "LinkedServiceReference"
+									}
+								},
+								{
+									"name": "UpdateFailedStatus_uam",
+									"type": "SqlServerStoredProcedure",
+									"dependsOn": [
+										{
+											"activity": "Check_Incremental_Flag_uam",
+											"dependencyConditions": [
+												"Failed"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"storedProcedureName": "[[datalake].[update_status]",
+										"storedProcedureParameters": {
+											"Status": {
+												"value": "Failed",
+												"type": "String"
+											},
+											"TableName": {
+												"value": {
+													"value": "@{item().Source_table}",
+													"type": "Expression"
+												},
+												"type": "String"
+											}
+										}
+									},
+									"linkedServiceName": {
+										"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+										"type": "LinkedServiceReference"
+									}
+								}
+							]
+						}
+					}
+				],
+				"variables": {
+					"dw_watermarktab": {
+						"type": "String"
+					},
+					"uam_watermarktab": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "DW-UAM"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:02Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/ADFConfigSource')]",
+				"[concat(variables('factoryId'), '/linkedServices/adfconfig_sqlmi_selfhostedLinkedService')]",
+				"[concat(variables('factoryId'), '/datasets/DataWarehouseSource')]",
+				"[concat(variables('factoryId'), '/datasets/DataWarehouseSink')]",
+				"[concat(variables('factoryId'), '/datasets/LogTableDatalakeMI')]",
+				"[concat(variables('factoryId'), '/datasets/UAMSource')]",
+				"[concat(variables('factoryId'), '/datasets/UAMSink')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/IngestAryaData')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Get Directories",
+						"type": "GetMetadata",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [
+							{
+								"name": "datevalue",
+								"value": "activity('configlookup').output.value[0]"
+							}
+						],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "AryaIngestionSource",
+								"type": "DatasetReference",
+								"parameters": {
+									"filename": "*"
+								}
+							},
+							"fieldList": [
+								"childItems"
+							],
+							"storeSettings": {
+								"type": "AzureBlobFSReadSettings",
+								"recursive": true,
+								"enablePartitionDiscovery": false
+							},
+							"formatSettings": {
+								"type": "BinaryReadSettings"
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Get Directories",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Get Directories').output.childitems",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Notebook1",
+									"type": "DatabricksNotebook",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"notebookPath": "/Shared/arya_profile/IngestData",
+										"baseParameters": {
+											"batchname": {
+												"value": "@item().name",
+												"type": "Expression"
+											},
+											"tablename": "allprofiles",
+											"database": "aryadb"
+										}
+									},
+									"linkedServiceName": {
+										"referenceName": "AzureDatabricksLinkedService",
+										"type": "LinkedServiceReference"
+									}
+								}
+							]
+						}
+					}
+				],
+				"variables": {
+					"filepath": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Tests-ToDeleteLater"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:01Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/AryaIngestionSource')]",
+				"[concat(variables('factoryId'), '/linkedServices/AzureDatabricksLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Linkup-Data-Extraction')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Get DiffMetadata",
+						"type": "GetMetadata",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "LinkupSFTP_Diff_Source_OnlyMetadataLookup",
+								"type": "DatasetReference",
+								"parameters": {
+									"filename": "*"
+								}
+							},
+							"fieldList": [
+								"childItems"
+							],
+							"storeSettings": {
+								"type": "SftpReadSettings",
+								"recursive": true,
+								"modifiedDatetimeStart": {
+									"value": "@pipeline().parameters.startDate",
+									"type": "Expression"
+								},
+								"modifiedDatetimeEnd": {
+									"value": "@pipeline().parameters.endDate",
+									"type": "Expression"
+								},
+								"enablePartitionDiscovery": false
+							},
+							"formatSettings": {
+								"type": "BinaryReadSettings"
+							}
+						}
+					},
+					{
+						"name": "ForEach-Diff",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Get DiffMetadata",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Get DiffMetadata').output.childitems",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy Diff Data",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"modifiedDatetimeStart": {
+													"value": "@pipeline().parameters.startDate",
+													"type": "Expression"
+												},
+												"wildcardFolderPath": {
+													"value": "@concat(string(pipeline().parameters.rootPathdiff),'/',string(item().name),'/')",
+													"type": "Expression"
+												},
+												"wildcardFileName": "*.zip",
+												"deleteFilesAfterCompletion": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings",
+												"compressionProperties": {
+													"type": "ZipDeflateReadSettings"
+												}
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											}
+										},
+										"enableStaging": false,
+										"logSettings": {
+											"enableCopyActivityLog": true,
+											"copyActivityLogSettings": {
+												"logLevel": "Info",
+												"enableReliableLogging": false
+											},
+											"logLocationSettings": {
+												"linkedServiceName": {
+													"referenceName": "DataLakeLinkedService",
+													"type": "LinkedServiceReference"
+												},
+												"path": "dsml/linkup_data/extracted_data/Kornferry/logs/diff"
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "LinkupSFTP_Diff_Source_CopyData",
+											"type": "DatasetReference",
+											"parameters": {
+												"foldername": {
+													"value": "@concat(string(pipeline().parameters.rootPathdiff),'/',string(item().name),'/')",
+													"type": "Expression"
+												},
+												"filename": "*.zip"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "Linkup_Diff_Sink",
+											"type": "DatasetReference",
+											"parameters": {
+												"sinkfilename": {
+													"value": "@concat(substring(string(item().name),0,10),'_d_linkup_kornferry.xml')",
+													"type": "Expression"
+												},
+												"sinkfolder": {
+													"value": "@concat(string(pipeline().parameters.sinkpathdiff),'/',substring(string(item().name),0,10),'/')",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					},
+					{
+						"name": "Get FullMetadata",
+						"type": "GetMetadata",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "LinkupSFTP_Full_Source_OnlyMetadataLookup",
+								"type": "DatasetReference",
+								"parameters": {
+									"filename": "*"
+								}
+							},
+							"fieldList": [
+								"childItems"
+							],
+							"storeSettings": {
+								"type": "SftpReadSettings",
+								"recursive": true,
+								"modifiedDatetimeStart": {
+									"value": "@pipeline().parameters.startDate",
+									"type": "Expression"
+								},
+								"modifiedDatetimeEnd": {
+									"value": "@pipeline().parameters.endDate",
+									"type": "Expression"
+								},
+								"enablePartitionDiscovery": false
+							},
+							"formatSettings": {
+								"type": "BinaryReadSettings"
+							}
+						}
+					},
+					{
+						"name": "ForEach-Full",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Get FullMetadata",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Get FullMetadata').output.childitems",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy Full Data",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"modifiedDatetimeStart": {
+													"value": "@pipeline().parameters.startDate",
+													"type": "Expression"
+												},
+												"wildcardFolderPath": {
+													"value": "@concat(string(pipeline().parameters.rootPathfull),'/',string(item().name),'/')",
+													"type": "Expression"
+												},
+												"wildcardFileName": "*.zip",
+												"deleteFilesAfterCompletion": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings",
+												"compressionProperties": {
+													"type": "ZipDeflateReadSettings"
+												}
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											}
+										},
+										"enableStaging": false,
+										"logSettings": {
+											"enableCopyActivityLog": true,
+											"copyActivityLogSettings": {
+												"logLevel": "Info",
+												"enableReliableLogging": false
+											},
+											"logLocationSettings": {
+												"linkedServiceName": {
+													"referenceName": "DataLakeLinkedService",
+													"type": "LinkedServiceReference"
+												},
+												"path": "dsml/linkup_data/extracted_data/Kornferry/logs/full"
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "LinkupSFTP_Full_Source_CopyData",
+											"type": "DatasetReference",
+											"parameters": {
+												"foldername": {
+													"value": "@concat(string(pipeline().parameters.rootPathfull),'/',string(item().name),'/')",
+													"type": "Expression"
+												},
+												"filename": "*.zip"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "Linkup_Diff_Sink",
+											"type": "DatasetReference",
+											"parameters": {
+												"sinkfilename": {
+													"value": "@concat(substring(string(item().name),0,10),'_linkup_kornferry.xml')",
+													"type": "Expression"
+												},
+												"sinkfolder": {
+													"value": "@concat(string(pipeline().parameters.sinkpathfull),'/',substring(string(item().name),0,10),'/')",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"parameters": {
+					"rootPathdiff": {
+						"type": "string",
+						"defaultValue": "JDE/Korn Ferry/Feeds/Korn Ferry Organic/Diff"
+					},
+					"filename": {
+						"type": "string",
+						"defaultValue": "*.zip"
+					},
+					"rootPathfull": {
+						"type": "string",
+						"defaultValue": "JDE/Korn Ferry/Feeds/Korn Ferry Organic/Full"
+					},
+					"startDate": {
+						"type": "string",
+						"defaultValue": "06/08/2021 00:00:00"
+					},
+					"endDate": {
+						"type": "string",
+						"defaultValue": "06/10/2021 00:00:00"
+					},
+					"sinkpathdiff": {
+						"type": "string",
+						"defaultValue": "linkup_data/extracted_data/Kornferry/Diff"
+					},
+					"sinkpathfull": {
+						"type": "string",
+						"defaultValue": "linkup_data/extracted_data/Kornferry/Full"
+					}
+				},
+				"folder": {
+					"name": "Linkup_KornferryFeeds"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:04Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_Diff_Source_OnlyMetadataLookup')]",
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_Full_Source_OnlyMetadataLookup')]",
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_Diff_Source_CopyData')]",
+				"[concat(variables('factoryId'), '/datasets/Linkup_Diff_Sink')]",
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_Full_Source_CopyData')]",
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Linkup-Data-Extraction_copyzips')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Get DiffMetadata",
+						"type": "GetMetadata",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "LinkupSFTP_Diff_Source_OnlyMetadataLookup",
+								"type": "DatasetReference",
+								"parameters": {
+									"filename": "*"
+								}
+							},
+							"fieldList": [
+								"childItems"
+							],
+							"storeSettings": {
+								"type": "SftpReadSettings",
+								"recursive": true,
+								"modifiedDatetimeStart": {
+									"value": "@pipeline().parameters.startDate",
+									"type": "Expression"
+								},
+								"modifiedDatetimeEnd": {
+									"value": "@pipeline().parameters.endDate",
+									"type": "Expression"
+								},
+								"enablePartitionDiscovery": false
+							},
+							"formatSettings": {
+								"type": "BinaryReadSettings"
+							}
+						}
+					},
+					{
+						"name": "ForEach-Diff",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Get DiffMetadata",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Get DiffMetadata').output.childitems",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy Diff Data",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"modifiedDatetimeStart": {
+													"value": "@pipeline().parameters.startDate",
+													"type": "Expression"
+												},
+												"wildcardFolderPath": {
+													"value": "@concat(string(pipeline().parameters.rootPathdiff),'/',string(item().name),'/')",
+													"type": "Expression"
+												},
+												"wildcardFileName": "*.zip",
+												"deleteFilesAfterCompletion": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											}
+										},
+										"enableStaging": false,
+										"logSettings": {
+											"enableCopyActivityLog": true,
+											"copyActivityLogSettings": {
+												"logLevel": "Info",
+												"enableReliableLogging": false
+											},
+											"logLocationSettings": {
+												"linkedServiceName": {
+													"referenceName": "DataLakeLinkedService",
+													"type": "LinkedServiceReference"
+												},
+												"path": "dsml/linkup_data/extracted_data/Kornferry/logs/diff"
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "LinkupSFTP_Diff_Source_ZIPCopy",
+											"type": "DatasetReference",
+											"parameters": {
+												"foldername": "@concat(string(pipeline().parameters.rootPathdiff),'/',string(item().name),'/')",
+												"filename": "*.zip"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "Linkup_Diff_Sink",
+											"type": "DatasetReference",
+											"parameters": {
+												"sinkfilename": {
+													"value": "@concat(substring(string(item().name),0,10),'_d_linkup_kornferry.zip')",
+													"type": "Expression"
+												},
+												"sinkfolder": {
+													"value": "@concat(string(pipeline().parameters.sinkpathdiff),'/',substring(string(item().name),0,10),'/')",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					},
+					{
+						"name": "Get FullMetadata",
+						"type": "GetMetadata",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "LinkupSFTP_Full_Source_OnlyMetadataLookup",
+								"type": "DatasetReference",
+								"parameters": {
+									"filename": "*"
+								}
+							},
+							"fieldList": [
+								"childItems"
+							],
+							"storeSettings": {
+								"type": "SftpReadSettings",
+								"recursive": true,
+								"modifiedDatetimeStart": {
+									"value": "@pipeline().parameters.startDate",
+									"type": "Expression"
+								},
+								"modifiedDatetimeEnd": {
+									"value": "@pipeline().parameters.endDate",
+									"type": "Expression"
+								},
+								"enablePartitionDiscovery": false
+							},
+							"formatSettings": {
+								"type": "BinaryReadSettings"
+							}
+						}
+					},
+					{
+						"name": "ForEach-Full",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Get FullMetadata",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Get FullMetadata').output.childitems",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy Full Data",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"modifiedDatetimeStart": {
+													"value": "@pipeline().parameters.startDate",
+													"type": "Expression"
+												},
+												"wildcardFolderPath": {
+													"value": "@concat(string(pipeline().parameters.rootPathfull),'/',string(item().name),'/')",
+													"type": "Expression"
+												},
+												"wildcardFileName": "*.zip",
+												"deleteFilesAfterCompletion": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											}
+										},
+										"enableStaging": false,
+										"logSettings": {
+											"enableCopyActivityLog": true,
+											"copyActivityLogSettings": {
+												"logLevel": "Info",
+												"enableReliableLogging": false
+											},
+											"logLocationSettings": {
+												"linkedServiceName": {
+													"referenceName": "DataLakeLinkedService",
+													"type": "LinkedServiceReference"
+												},
+												"path": "dsml/linkup_data/extracted_data/Kornferry/logs/full"
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "LinkupSFTP_Full_Source_ZIPCopy",
+											"type": "DatasetReference",
+											"parameters": {
+												"foldername": "@concat(string(pipeline().parameters.rootPathfull),'/',string(item().name),'/')",
+												"filename": "*.zip"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "Linkup_Diff_Sink",
+											"type": "DatasetReference",
+											"parameters": {
+												"sinkfilename": {
+													"value": "@concat(substring(string(item().name),0,10),'_linkup_kornferry.zip')",
+													"type": "Expression"
+												},
+												"sinkfolder": {
+													"value": "@concat(string(pipeline().parameters.sinkpathfull),'/',substring(string(item().name),0,10),'/')",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"parameters": {
+					"rootPathdiff": {
+						"type": "string",
+						"defaultValue": "JDE/Korn Ferry/Feeds/Korn Ferry Organic/Diff"
+					},
+					"filename": {
+						"type": "string",
+						"defaultValue": "*.zip"
+					},
+					"rootPathfull": {
+						"type": "string",
+						"defaultValue": "JDE/Korn Ferry/Feeds/Korn Ferry Organic/Full"
+					},
+					"startDate": {
+						"type": "string",
+						"defaultValue": "06/08/2021 00:00:00"
+					},
+					"endDate": {
+						"type": "string",
+						"defaultValue": "06/10/2021 00:00:00"
+					},
+					"sinkpathdiff": {
+						"type": "string",
+						"defaultValue": "linkup_data/zip_data/Kornferry/Diff"
+					},
+					"sinkpathfull": {
+						"type": "string",
+						"defaultValue": "linkup_data/zip_data/Kornferry/Full"
+					}
+				},
+				"folder": {
+					"name": "Linkup_KornferryFeeds"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:04Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_Diff_Source_OnlyMetadataLookup')]",
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_Full_Source_OnlyMetadataLookup')]",
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_Diff_Source_ZIPCopy')]",
+				"[concat(variables('factoryId'), '/datasets/Linkup_Diff_Sink')]",
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_Full_Source_ZIPCopy')]",
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Linkup-Data-Extraction_old_backup')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Get DiffMetadata",
+						"type": "GetMetadata",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "LinkupSFTP_Diff_Source_OnlyMetadataLookup",
+								"type": "DatasetReference",
+								"parameters": {
+									"filename": "*"
+								}
+							},
+							"fieldList": [
+								"childItems"
+							],
+							"storeSettings": {
+								"type": "SftpReadSettings",
+								"recursive": true,
+								"modifiedDatetimeStart": {
+									"value": "@pipeline().parameters.startDate",
+									"type": "Expression"
+								},
+								"modifiedDatetimeEnd": {
+									"value": "@pipeline().parameters.endDate",
+									"type": "Expression"
+								},
+								"enablePartitionDiscovery": false
+							},
+							"formatSettings": {
+								"type": "BinaryReadSettings"
+							}
+						}
+					},
+					{
+						"name": "ForEach-Diff",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Get DiffMetadata",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Get DiffMetadata').output.childitems",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy Diff Data",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"modifiedDatetimeStart": {
+													"value": "@pipeline().parameters.startDate",
+													"type": "Expression"
+												},
+												"wildcardFolderPath": {
+													"value": "@concat(string(pipeline().parameters.rootPathdiff),'/',string(item().name),'/')",
+													"type": "Expression"
+												},
+												"wildcardFileName": "*.gz",
+												"deleteFilesAfterCompletion": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											}
+										},
+										"enableStaging": false,
+										"logSettings": {
+											"enableCopyActivityLog": true,
+											"copyActivityLogSettings": {
+												"logLevel": "Info",
+												"enableReliableLogging": false
+											},
+											"logLocationSettings": {
+												"linkedServiceName": {
+													"referenceName": "DataLakeLinkedService",
+													"type": "LinkedServiceReference"
+												},
+												"path": "dsml/linkup_data/extracted_data/Kornferry/logs/diff"
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "LinkupSFTP_Diff_Source_CopyData",
+											"type": "DatasetReference",
+											"parameters": {
+												"foldername": {
+													"value": "@concat(string(pipeline().parameters.rootPathdiff),'/',string(item().name),'/')",
+													"type": "Expression"
+												},
+												"filename": "*.gz"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "Linkup_Diff_Sink",
+											"type": "DatasetReference",
+											"parameters": {
+												"sinkfilename": {
+													"value": "@concat(substring(string(item().name),0,10),'_d_KornFerryFeed.xml')",
+													"type": "Expression"
+												},
+												"sinkfolder": {
+													"value": "@concat(string(pipeline().parameters.sinkpathdiff),'/',substring(string(item().name),0,10),'/')",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					},
+					{
+						"name": "Get FullMetadata",
+						"type": "GetMetadata",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "LinkupSFTP_Full_Source_OnlyMetadataLookup",
+								"type": "DatasetReference",
+								"parameters": {
+									"filename": "*"
+								}
+							},
+							"fieldList": [
+								"childItems"
+							],
+							"storeSettings": {
+								"type": "SftpReadSettings",
+								"recursive": true,
+								"modifiedDatetimeStart": {
+									"value": "@pipeline().parameters.startDate",
+									"type": "Expression"
+								},
+								"modifiedDatetimeEnd": {
+									"value": "@pipeline().parameters.endDate",
+									"type": "Expression"
+								},
+								"enablePartitionDiscovery": false
+							},
+							"formatSettings": {
+								"type": "BinaryReadSettings"
+							}
+						}
+					},
+					{
+						"name": "ForEach-Full",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Get FullMetadata",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Get FullMetadata').output.childitems",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy Full Data",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"modifiedDatetimeStart": {
+													"value": "@pipeline().parameters.startDate",
+													"type": "Expression"
+												},
+												"wildcardFolderPath": {
+													"value": "@concat(string(pipeline().parameters.rootPathfull),'/',string(item().name),'/')",
+													"type": "Expression"
+												},
+												"wildcardFileName": "*.gz",
+												"deleteFilesAfterCompletion": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											}
+										},
+										"enableStaging": false,
+										"logSettings": {
+											"enableCopyActivityLog": true,
+											"copyActivityLogSettings": {
+												"logLevel": "Info",
+												"enableReliableLogging": false
+											},
+											"logLocationSettings": {
+												"linkedServiceName": {
+													"referenceName": "DataLakeLinkedService",
+													"type": "LinkedServiceReference"
+												},
+												"path": "dsml/linkup_data/extracted_data/Kornferry/logs/full"
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "LinkupSFTP_Full_Source_CopyData",
+											"type": "DatasetReference",
+											"parameters": {
+												"foldername": {
+													"value": "@concat(string(pipeline().parameters.rootPathfull),'/',string(item().name),'/')",
+													"type": "Expression"
+												},
+												"filename": "*.gz"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "Linkup_Diff_Sink",
+											"type": "DatasetReference",
+											"parameters": {
+												"sinkfilename": {
+													"value": "@concat(substring(string(item().name),0,10),'_KornFerryFeed.xml')",
+													"type": "Expression"
+												},
+												"sinkfolder": {
+													"value": "@concat(string(pipeline().parameters.sinkpathfull),'/',substring(string(item().name),0,10),'/')",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"parameters": {
+					"rootPathdiff": {
+						"type": "string",
+						"defaultValue": "JDE/Korn Ferry/Feeds/Korn Ferry Organic/Diff"
+					},
+					"filename": {
+						"type": "string",
+						"defaultValue": "*.gz"
+					},
+					"rootPathfull": {
+						"type": "string",
+						"defaultValue": "JDE/Korn Ferry/Feeds/Korn Ferry Organic/Full"
+					},
+					"startDate": {
+						"type": "string",
+						"defaultValue": "06/08/2021 00:00:00"
+					},
+					"endDate": {
+						"type": "string",
+						"defaultValue": "06/10/2021 00:00:00"
+					},
+					"sinkpathdiff": {
+						"type": "string",
+						"defaultValue": "linkup_data/extracted_data/Kornferry/Diff"
+					},
+					"sinkpathfull": {
+						"type": "string",
+						"defaultValue": "linkup_data/extracted_data/Kornferry/Full"
+					}
+				},
+				"folder": {
+					"name": "Tests-ToDeleteLater"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:04Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_Diff_Source_OnlyMetadataLookup')]",
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_Full_Source_OnlyMetadataLookup')]",
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_Diff_Source_CopyData')]",
+				"[concat(variables('factoryId'), '/datasets/Linkup_Diff_Sink')]",
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_Full_Source_CopyData')]",
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Linkup-StandardFeeds-CompanyTicker')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data1_copy1",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "BinarySource",
+								"storeSettings": {
+									"type": "SftpReadSettings",
+									"recursive": true,
+									"deleteFilesAfterCompletion": false
+								},
+								"formatSettings": {
+									"type": "BinaryReadSettings"
+								}
+							},
+							"sink": {
+								"type": "BinarySink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "LinkupSFTP_StandardFeeds_Source",
+								"type": "DatasetReference",
+								"parameters": {
+									"sourcefolder": {
+										"value": "@pipeline().parameters.path",
+										"type": "Expression"
+									},
+									"sourcefile": {
+										"value": "@pipeline().parameters.filename",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "Linkup_StandardFeeds_Sink",
+								"type": "DatasetReference",
+								"parameters": {
+									"sinkfolder": {
+										"value": "@string(pipeline().parameters.sinkpath)",
+										"type": "Expression"
+									},
+									"sinkfilename": {
+										"value": "@substring(string(pipeline().parameters.filename),0,30)",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"parameters": {
+					"path": {
+						"type": "string",
+						"defaultValue": "JDE/Standard/Feeds/Company Ticker Reference/2021/05/"
+					},
+					"sinkpath": {
+						"type": "string",
+						"defaultValue": "linkup_data/zip_data/StandardFeeds/"
+					},
+					"filename": {
+						"type": "string",
+						"defaultValue": "company_ticker_2021-05-31.csv.gz"
+					}
+				},
+				"variables": {
+					"ListOfFiles": {
+						"type": "Array"
+					}
+				},
+				"folder": {
+					"name": "Linkup_StandardFeeds"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:01Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_StandardFeeds_Source')]",
+				"[concat(variables('factoryId'), '/datasets/Linkup_StandardFeeds_Sink')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Linkup-StandardFeeds-CoreCompanyAnalytics')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data1_copy1",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "BinarySource",
+								"storeSettings": {
+									"type": "SftpReadSettings",
+									"recursive": true,
+									"deleteFilesAfterCompletion": false
+								},
+								"formatSettings": {
+									"type": "BinaryReadSettings"
+								}
+							},
+							"sink": {
+								"type": "BinarySink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "LinkupSFTP_StandardFeeds_Source",
+								"type": "DatasetReference",
+								"parameters": {
+									"sourcefolder": {
+										"value": "@pipeline().parameters.path",
+										"type": "Expression"
+									},
+									"sourcefile": {
+										"value": "@pipeline().parameters.filename",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "Linkup_StandardFeeds_Sink",
+								"type": "DatasetReference",
+								"parameters": {
+									"sinkfolder": {
+										"value": "@string(pipeline().parameters.sinkpath)",
+										"type": "Expression"
+									},
+									"sinkfilename": {
+										"value": "@substring(string(pipeline().parameters.filename),0,37)",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"parameters": {
+					"path": {
+						"type": "string",
+						"defaultValue": "JDE/Standard/MarketReports/Reports/Core_Company_Analytics/"
+					},
+					"sinkpath": {
+						"type": "string",
+						"defaultValue": "linkup_data/zip_data/StandardFeeds/"
+					},
+					"filename": {
+						"type": "string",
+						"defaultValue": "core_company_analytics_2021-05-31.csv.gz"
+					}
+				},
+				"variables": {
+					"ListOfFiles": {
+						"type": "Array"
+					}
+				},
+				"folder": {
+					"name": "Linkup_StandardFeeds"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:01Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_StandardFeeds_Source')]",
+				"[concat(variables('factoryId'), '/datasets/Linkup_StandardFeeds_Sink')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Linkup-StandardFeeds-JobDescriptions_Extraction')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data1_copy1",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "BinarySource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true
+								},
+								"formatSettings": {
+									"type": "BinaryReadSettings"
+								}
+							},
+							"sink": {
+								"type": "BinarySink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "Linkup_StandardFeeds_SinkExtract",
+								"type": "DatasetReference",
+								"parameters": {
+									"sinkfolder": {
+										"value": "@pipeline().parameters.sinkpath",
+										"type": "Expression"
+									},
+									"sinkfilename": {
+										"value": "@pipeline().parameters.descfname",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "Linkup_StandardFeeds_Sink",
+								"type": "DatasetReference",
+								"parameters": {
+									"sinkfolder": {
+										"value": "@string(pipeline().parameters.newsinkpath)",
+										"type": "Expression"
+									},
+									"sinkfilename": {
+										"value": "@substring(string(pipeline().parameters.descfname),0,34)",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"parameters": {
+					"descpath": {
+						"type": "string",
+						"defaultValue": "JDE/Standard/Feeds/Raw Full Job Descriptions/2021/05/"
+					},
+					"sinkpath": {
+						"type": "string",
+						"defaultValue": "linkup_data/zip_data/StandardFeeds/"
+					},
+					"descfname": {
+						"type": "string",
+						"defaultValue": "linkup_job_descriptions_2021-05-31.tar.gz"
+					},
+					"newsinkpath": {
+						"type": "string",
+						"defaultValue": "linkup_data/zip_data/StandardFeeds/extracted"
+					}
+				},
+				"variables": {
+					"ListOfFiles": {
+						"type": "Array"
+					}
+				},
+				"folder": {
+					"name": "Tests-ToDeleteLater"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:02Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/Linkup_StandardFeeds_SinkExtract')]",
+				"[concat(variables('factoryId'), '/datasets/Linkup_StandardFeeds_Sink')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Linkup-StandardFeeds-JobsAndDescriptions')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Append variable1",
+						"type": "AppendVariable",
+						"dependsOn": [],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "ListOfFiles",
+							"value": {
+								"value": "@pipeline().parameters.companyrefpath",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Append variable2",
+						"type": "AppendVariable",
+						"dependsOn": [
+							{
+								"activity": "Append variable1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "ListOfFiles",
+							"value": {
+								"value": "@pipeline().parameters.fulljobdescpath",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Append variable3",
+						"type": "AppendVariable",
+						"dependsOn": [
+							{
+								"activity": "Append variable2",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "ListOfFiles",
+							"value": {
+								"value": "@pipeline().parameters.jobrecordspath",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Append variable3",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@variables('ListOfFiles')",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Get Metadata1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"wildcardFolderPath": {
+													"value": "@string(item())",
+													"type": "Expression"
+												},
+												"wildcardFileName": "*.gz",
+												"deleteFilesAfterCompletion": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings",
+												"compressionProperties": {
+													"type": "ZipDeflateReadSettings"
+												}
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "LinkupSFTP_StandardFeeds_Source",
+											"type": "DatasetReference",
+											"parameters": {
+												"sourcefolder": {
+													"value": "@string(item())",
+													"type": "Expression"
+												},
+												"sourcefile": "*.gz"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "Linkup_StandardFeeds_Sink",
+											"type": "DatasetReference",
+											"parameters": {
+												"sinkfolder": {
+													"value": "@string(pipeline().parameters.sinkpath)",
+													"type": "Expression"
+												},
+												"sinkfilename": {
+													"value": "@activity('Get Metadata1').output.childitems[0].name",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Get Metadata1",
+									"type": "GetMetadata",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"dataset": {
+											"referenceName": "LinkupSFTP_StandardFeeds_Source",
+											"type": "DatasetReference",
+											"parameters": {
+												"sourcefolder": "@item()",
+												"sourcefile": "*.gz"
+											}
+										},
+										"fieldList": [
+											"childItems"
+										],
+										"storeSettings": {
+											"type": "SftpReadSettings",
+											"recursive": true,
+											"enablePartitionDiscovery": false
+										},
+										"formatSettings": {
+											"type": "BinaryReadSettings"
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"parameters": {
+					"companyrefpath": {
+						"type": "string",
+						"defaultValue": "JDE/Standard/Feeds/Raw Full PIT Company Reference/2021/05/"
+					},
+					"jobrecordspath": {
+						"type": "string",
+						"defaultValue": "JDE/Standard/Feeds/Raw Full Job Records/2021/05/"
+					},
+					"fulljobdescpath": {
+						"type": "string",
+						"defaultValue": "JDE/Standard/Feeds/Raw Full Job Descriptions/2021/05/"
+					},
+					"marketreportpath": {
+						"type": "string",
+						"defaultValue": "JDE/Standard/MarketReports/Reports/Core_Ticker_Analytics_v2/core_ticker_analytics_v2_2021-05-31.csv.gz"
+					},
+					"sinkpath": {
+						"type": "string",
+						"defaultValue": "linkup_data/zip_data/StandardFeeds/"
+					}
+				},
+				"variables": {
+					"ListOfFiles": {
+						"type": "Array"
+					}
+				},
+				"folder": {
+					"name": "Linkup_StandardFeeds"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:01Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_StandardFeeds_Source')]",
+				"[concat(variables('factoryId'), '/datasets/Linkup_StandardFeeds_Sink')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Linkup-StandardFeeds-MarketReports')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data1_copy1",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "BinarySource",
+								"storeSettings": {
+									"type": "SftpReadSettings",
+									"recursive": true,
+									"deleteFilesAfterCompletion": false
+								},
+								"formatSettings": {
+									"type": "BinaryReadSettings"
+								}
+							},
+							"sink": {
+								"type": "BinarySink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "LinkupSFTP_StandardFeeds_Source",
+								"type": "DatasetReference",
+								"parameters": {
+									"sourcefolder": {
+										"value": "@pipeline().parameters.marketreportpath",
+										"type": "Expression"
+									},
+									"sourcefile": {
+										"value": "@pipeline().parameters.marketdatafilename",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "Linkup_StandardFeeds_Sink",
+								"type": "DatasetReference",
+								"parameters": {
+									"sinkfolder": {
+										"value": "@string(pipeline().parameters.sinkpath)",
+										"type": "Expression"
+									},
+									"sinkfilename": {
+										"value": "@substring(string(pipeline().parameters.marketdatafilename),0,39)",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"parameters": {
+					"marketreportpath": {
+						"type": "string",
+						"defaultValue": "JDE/Standard/MarketReports/Reports/Core_Ticker_Analytics_v2/"
+					},
+					"sinkpath": {
+						"type": "string",
+						"defaultValue": "linkup_data/zip_data/StandardFeeds/"
+					},
+					"marketdatafilename": {
+						"type": "string",
+						"defaultValue": "core_ticker_analytics_v2_2021-05-31.csv.gz"
+					}
+				},
+				"variables": {
+					"ListOfFiles": {
+						"type": "Array"
+					}
+				},
+				"folder": {
+					"name": "Linkup_StandardFeeds"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:01Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_StandardFeeds_Source')]",
+				"[concat(variables('factoryId'), '/datasets/Linkup_StandardFeeds_Sink')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Linkup-StandardFeeds-OnlyJobDescriptions')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data1_copy1",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "BinarySource",
+								"storeSettings": {
+									"type": "SftpReadSettings",
+									"recursive": true,
+									"deleteFilesAfterCompletion": false
+								},
+								"formatSettings": {
+									"type": "BinaryReadSettings"
+								}
+							},
+							"sink": {
+								"type": "BinarySink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "LinkupSFTP_StandardFeeds_Source_JOBDescriptions",
+								"type": "DatasetReference",
+								"parameters": {
+									"sourcefolder": {
+										"value": "@pipeline().parameters.descpath",
+										"type": "Expression"
+									},
+									"sourcefile": {
+										"value": "@pipeline().parameters.descfname",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "Linkup_StandardFeeds_Sink",
+								"type": "DatasetReference",
+								"parameters": {
+									"sinkfolder": {
+										"value": "@string(pipeline().parameters.sinkpath)",
+										"type": "Expression"
+									},
+									"sinkfilename": {
+										"value": "@pipeline().parameters.descfname",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"parameters": {
+					"descpath": {
+						"type": "string",
+						"defaultValue": "JDE/Standard/Feeds/Raw Full Job Descriptions/2021/05/"
+					},
+					"sinkpath": {
+						"type": "string",
+						"defaultValue": "linkup_data/zip_data/StandardFeeds/"
+					},
+					"descfname": {
+						"type": "string",
+						"defaultValue": "linkup_job_descriptions_2021-05-31.tar.gz"
+					}
+				},
+				"variables": {
+					"ListOfFiles": {
+						"type": "Array"
+					}
+				},
+				"folder": {
+					"name": "OneTimeDataCopy"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:01Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_StandardFeeds_Source_JOBDescriptions')]",
+				"[concat(variables('factoryId'), '/datasets/Linkup_StandardFeeds_Sink')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/S3DataCopy')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy S3Data",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "BinarySource",
+								"storeSettings": {
+									"type": "AmazonS3ReadSettings",
+									"recursive": true
+								},
+								"formatSettings": {
+									"type": "BinaryReadSettings"
+								}
+							},
+							"sink": {
+								"type": "BinarySink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "S3GeographyDataSource",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "S3GeographyDataSink",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						]
+					}
+				],
+				"folder": {
+					"name": "OneTimeDataCopy"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:03Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/S3GeographyDataSource')]",
+				"[concat(variables('factoryId'), '/datasets/S3GeographyDataSink')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/pipeline2')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data1",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "BinarySource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true
+								},
+								"formatSettings": {
+									"type": "BinaryReadSettings"
+								}
+							},
+							"sink": {
+								"type": "BinarySink",
+								"storeSettings": {
+									"type": "AzureBlobStorageWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "Binary2_copy1",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "Binary2",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						]
+					}
+				],
+				"folder": {
+					"name": "Tests-ToDeleteLater"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-02T14:43:03Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/Binary2_copy1')]",
+				"[concat(variables('factoryId'), '/datasets/Binary2')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/zipextraction')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Get Metadata1",
+						"type": "GetMetadata",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [
+							{
+								"name": "datevalue",
+								"value": "activity('configlookup').output.value[0]"
+							}
+						],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "AryaProfilesSource",
+								"type": "DatasetReference",
+								"parameters": {
+									"filename": "*.zip"
+								}
+							},
+							"fieldList": [
+								"childItems"
+							],
+							"storeSettings": {
+								"type": "AzureBlobStorageReadSettings",
+								"recursive": true,
+								"enablePartitionDiscovery": false
+							},
+							"formatSettings": {
+								"type": "BinaryReadSettings"
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Get Metadata1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Get Metadata1').output.childitems",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "AzureBlobStorageReadSettings",
+												"recursive": false,
+												"deleteFilesAfterCompletion": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings",
+												"compressionProperties": {
+													"type": "ZipDeflateReadSettings",
+													"preserveZipFileNameAsFolder": true
+												}
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "AryaProfilesSource",
+											"type": "DatasetReference",
+											"parameters": {
+												"filename": "@item().name"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "AryaDatalakeSink",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									]
+								},
+								{
+									"name": "MoveProcessedZips",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Copy data1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "AzureBlobStorageReadSettings",
+												"recursive": false,
+												"deleteFilesAfterCompletion": true
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobStorageWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "AryaProfilesMoveZIPSource",
+											"type": "DatasetReference",
+											"parameters": {
+												"filename": "@item().name"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "AryaProfilesMoveZIPSink",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"folder": {
+					"name": "AryaProfiles"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:01Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/AryaProfilesSource')]",
+				"[concat(variables('factoryId'), '/datasets/AryaDatalakeSink')]",
+				"[concat(variables('factoryId'), '/datasets/AryaProfilesMoveZIPSource')]",
+				"[concat(variables('factoryId'), '/datasets/AryaProfilesMoveZIPSink')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/zipextraction_old')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "Old one-  Only extracts all zip files, zip files are not moved after they're extracted.\n\n",
+				"activities": [
+					{
+						"name": "Get Metadata1",
+						"type": "GetMetadata",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "AryaProfilesSource",
+								"type": "DatasetReference",
+								"parameters": {
+									"filename": "*.zip"
+								}
+							},
+							"fieldList": [
+								"childItems"
+							],
+							"storeSettings": {
+								"type": "AzureBlobStorageReadSettings",
+								"recursive": true,
+								"enablePartitionDiscovery": false
+							},
+							"formatSettings": {
+								"type": "BinaryReadSettings"
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Get Metadata1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Get Metadata1').output.childitems",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "AzureBlobStorageReadSettings",
+												"recursive": false,
+												"deleteFilesAfterCompletion": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings",
+												"compressionProperties": {
+													"type": "ZipDeflateReadSettings",
+													"preserveZipFileNameAsFolder": true
+												}
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "AryaProfilesSource",
+											"type": "DatasetReference",
+											"parameters": {
+												"filename": "@item().name"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "AryaDatalakeSink",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"folder": {
+					"name": "Tests-ToDeleteLater"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:01Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/AryaProfilesSource')]",
+				"[concat(variables('factoryId'), '/datasets/AryaDatalakeSink')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/zipextraction_test')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Get Metadata1",
+						"type": "GetMetadata",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [
+							{
+								"name": "datevalue",
+								"value": "activity('configlookup').output.value[0]"
+							}
+						],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "Binary1",
+								"type": "DatasetReference",
+								"parameters": {
+									"filename": "*.zip"
+								}
+							},
+							"fieldList": [
+								"childItems"
+							],
+							"storeSettings": {
+								"type": "AzureBlobStorageReadSettings",
+								"recursive": true,
+								"enablePartitionDiscovery": false
+							},
+							"formatSettings": {
+								"type": "BinaryReadSettings"
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Get Metadata1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Get Metadata1').output.childitems",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "AzureBlobStorageReadSettings",
+												"recursive": false,
+												"deleteFilesAfterCompletion": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings",
+												"compressionProperties": {
+													"type": "ZipDeflateReadSettings",
+													"preserveZipFileNameAsFolder": true
+												}
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobStorageWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "Binary1",
+											"type": "DatasetReference",
+											"parameters": {
+												"filename": "@item().name"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "Binary1Sink",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									]
+								},
+								{
+									"name": "MoveProcessedZips",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Copy data1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "AzureBlobStorageReadSettings",
+												"recursive": false,
+												"deleteFilesAfterCompletion": true
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobStorageWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "Binary1_zipcopy",
+											"type": "DatasetReference",
+											"parameters": {
+												"filename": "@item().name"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "Binary1MoveProcessedZipSink",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"folder": {
+					"name": "Tests-ToDeleteLater"
+				},
+				"annotations": [],
+				"lastPublishTime": "2021-07-01T13:27:02Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/Binary1')]",
+				"[concat(variables('factoryId'), '/datasets/Binary1Sink')]",
+				"[concat(variables('factoryId'), '/datasets/Binary1_zipcopy')]",
+				"[concat(variables('factoryId'), '/datasets/Binary1MoveProcessedZipSink')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ADFConfigSource')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "ManagedSQLInstanceDatasets"
+				},
+				"annotations": [],
+				"type": "AzureSqlMITable",
+				"schema": [],
+				"typeProperties": {
+					"schema": "datalake",
+					"table": "adfconf"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/adfconfig_sqlmi_selfhostedLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ADFConfigSource_OLD')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureSQLManagedInstaceLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "ManagedSQLInstanceDatasets"
+				},
+				"annotations": [],
+				"type": "AzureSqlMITable",
+				"schema": [],
+				"typeProperties": {
+					"schema": "datalake",
+					"table": "adfconf"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AzureSQLManagedInstaceLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AryaDatalakeSink')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "DataLakeLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "AryaProfilesDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "aryaprofiles/extracted_zip_data",
+						"fileSystem": "dsml"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AryaIngestionSource')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "DataLakeLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"filename": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "AryaProfilesDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().filename",
+							"type": "Expression"
+						},
+						"folderPath": "aryaprofiles/extracted_zip_data",
+						"fileSystem": "dsml"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AryaProfilesMoveZIPSink')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AryaProfilesLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "AryaProfilesDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"folderPath": "adfprocessedzips",
+						"container": "sampledata"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AryaProfilesLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AryaProfilesMoveZIPSource')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AryaProfilesLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"filename": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "AryaProfilesDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"fileName": {
+							"value": "@dataset().filename",
+							"type": "Expression"
+						},
+						"folderPath": "profiles",
+						"container": "sampledata"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AryaProfilesLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AryaProfilesSource')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AryaProfilesLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"filename": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "AryaProfilesDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"fileName": {
+							"value": "@dataset().filename",
+							"type": "Expression"
+						},
+						"folderPath": "profiles",
+						"container": "sampledata"
+					},
+					"compression": {
+						"type": "ZipDeflate",
+						"level": "Optimal"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AryaProfilesLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Binary1')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AryaProfilesLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"filename": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "ToDelete/TestBinaryZipExtractionDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"fileName": {
+							"value": "@dataset().filename",
+							"type": "Expression"
+						},
+						"folderPath": "config/Sourceziptest",
+						"container": "sampledata"
+					},
+					"compression": {
+						"type": "ZipDeflate",
+						"level": "Optimal"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AryaProfilesLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Binary1MoveProcessedZipSink')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AryaProfilesLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "ToDelete/TestBinaryZipExtractionDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"folderPath": "adfprocessedzips",
+						"container": "sampledata"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AryaProfilesLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Binary1Sink')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AryaProfilesLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "ToDelete/TestBinaryZipExtractionDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"folderPath": "adfprocessedzips/extract",
+						"container": "sampledata"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AryaProfilesLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Binary1_zipcopy')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AryaProfilesLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"filename": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "ToDelete/TestBinaryZipExtractionDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"fileName": {
+							"value": "@dataset().filename",
+							"type": "Expression"
+						},
+						"folderPath": "config/Sourceziptest",
+						"container": "sampledata"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AryaProfilesLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Binary2')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AryaProfilesLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "ToDelete/test_copy_Delta_table"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"folderPath": "linkuptest",
+						"container": "sampledata"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AryaProfilesLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Binary2_copy1')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "DataLakeLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "ToDelete/test_copy_Delta_table"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "linkup_data/zip_data/StandardFeeds/test2",
+						"fileSystem": "dsml"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/CSVDataSinkLogs')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "DataLakeLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "ToDelete/test_copy_Delta_table"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "linkup_data/zip_data/StandardFeeds/csv",
+						"fileSystem": "dsml"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DataWarehouseSink')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "DataLakeLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"STGfilename": {
+						"type": "string",
+						"defaultValue": "demo"
+					}
+				},
+				"folder": {
+					"name": "ManagedSQLInstanceDatasets"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().STGfilename",
+							"type": "Expression"
+						},
+						"folderPath": "mi_data/datawarehouse_db",
+						"fileSystem": "dsml"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DataWarehouseSource')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "datawarehouse_sqlmi_selhostedLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "ManagedSQLInstanceDatasets"
+				},
+				"annotations": [],
+				"type": "AzureSqlMITable",
+				"schema": [],
+				"typeProperties": {}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/datawarehouse_sqlmi_selhostedLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LinkupSFTP_Diff_Source_CopyData')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "Sftp_LinkupLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"foldername": {
+						"type": "string"
+					},
+					"filename": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "LinkupDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "SftpLocation",
+						"fileName": {
+							"value": "@dataset().filename",
+							"type": "Expression"
+						},
+						"folderPath": "/@dataset().foldername"
+					},
+					"compression": {
+						"type": "ZipDeflate",
+						"level": "Optimal"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/Sftp_LinkupLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LinkupSFTP_Diff_Source_OnlyMetadataLookup')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "Sftp_LinkupLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"filename": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "LinkupDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "SftpLocation",
+						"fileName": {
+							"value": "@dataset().filename",
+							"type": "Expression"
+						},
+						"folderPath": "/JDE/Korn Ferry/Feeds/Korn Ferry Organic/Diff"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/Sftp_LinkupLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LinkupSFTP_Diff_Source_ZIPCopy')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "Sftp_LinkupLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"foldername": {
+						"type": "string"
+					},
+					"filename": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "LinkupDatasets/copyzips"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "SftpLocation",
+						"fileName": {
+							"value": "@dataset().filename",
+							"type": "Expression"
+						},
+						"folderPath": "/@dataset().foldername"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/Sftp_LinkupLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LinkupSFTP_Full_Source_CopyData')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "Sftp_LinkupLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"foldername": {
+						"type": "string"
+					},
+					"filename": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "LinkupDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "SftpLocation",
+						"fileName": {
+							"value": "@dataset().filename",
+							"type": "Expression"
+						},
+						"folderPath": "/@dataset().foldername"
+					},
+					"compression": {
+						"type": "ZipDeflate",
+						"level": "Optimal"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/Sftp_LinkupLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LinkupSFTP_Full_Source_OnlyMetadataLookup')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "Sftp_LinkupLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"filename": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "LinkupDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "SftpLocation",
+						"fileName": {
+							"value": "@dataset().filename",
+							"type": "Expression"
+						},
+						"folderPath": "/JDE/Korn Ferry/Feeds/Korn Ferry Organic/Full"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/Sftp_LinkupLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LinkupSFTP_Full_Source_ZIPCopy')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "Sftp_LinkupLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"foldername": {
+						"type": "string"
+					},
+					"filename": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "LinkupDatasets/copyzips"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "SftpLocation",
+						"fileName": {
+							"value": "@dataset().filename",
+							"type": "Expression"
+						},
+						"folderPath": "/@dataset().foldername"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/Sftp_LinkupLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LinkupSFTP_StandardFeeds_Source')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "Sftp_LinkupLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"sourcefolder": {
+						"type": "string"
+					},
+					"sourcefile": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "LinkupDatasets/standardfeeds"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "SftpLocation",
+						"fileName": {
+							"value": "@dataset().sourcefile",
+							"type": "Expression"
+						},
+						"folderPath": {
+							"value": "@dataset().sourcefolder",
+							"type": "Expression"
+						}
+					},
+					"compression": {
+						"type": "gzip",
+						"level": "Optimal"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/Sftp_LinkupLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LinkupSFTP_StandardFeeds_Source_JOBDescriptions')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "Sftp_LinkupLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"sourcefolder": {
+						"type": "string"
+					},
+					"sourcefile": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "LinkupDatasets/standardfeeds"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "SftpLocation",
+						"fileName": {
+							"value": "@dataset().sourcefile",
+							"type": "Expression"
+						},
+						"folderPath": {
+							"value": "@dataset().sourcefolder",
+							"type": "Expression"
+						}
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/Sftp_LinkupLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Linkup_Diff_Sink')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "DataLakeLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"sinkfilename": {
+						"type": "string"
+					},
+					"sinkfolder": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "LinkupDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().sinkfilename",
+							"type": "Expression"
+						},
+						"folderPath": {
+							"value": "@dataset().sinkfolder",
+							"type": "Expression"
+						},
+						"fileSystem": "dsml"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Linkup_Full_Sink')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "DataLakeLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"sinkfilename": {
+						"type": "string"
+					},
+					"sinkfolder": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "LinkupDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().sinkfilename",
+							"type": "Expression"
+						},
+						"folderPath": {
+							"value": "@dataset().sinkfolder",
+							"type": "Expression"
+						},
+						"fileSystem": "dsml"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Linkup_StandardFeeds_Sink')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "DataLakeLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"sinkfolder": {
+						"type": "string"
+					},
+					"sinkfilename": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "LinkupDatasets/standardfeeds"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().sinkfilename",
+							"type": "Expression"
+						},
+						"folderPath": {
+							"value": "@dataset().sinkfolder",
+							"type": "Expression"
+						},
+						"fileSystem": "dsml"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Linkup_StandardFeeds_SinkExtract')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "DataLakeLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"sinkfolder": {
+						"type": "string"
+					},
+					"sinkfilename": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "LinkupDatasets/standardfeeds"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().sinkfilename",
+							"type": "Expression"
+						},
+						"folderPath": {
+							"value": "@dataset().sinkfolder",
+							"type": "Expression"
+						},
+						"fileSystem": "dsml"
+					},
+					"compression": {
+						"type": "gzip",
+						"level": "Optimal"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LogTableDatalakeMI')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "ManagedSQLInstanceDatasets"
+				},
+				"annotations": [],
+				"type": "AzureSqlMITable",
+				"schema": [
+					{
+						"name": "DataFactory_Name",
+						"type": "nvarchar"
+					},
+					{
+						"name": "Pipeline_Name",
+						"type": "nvarchar"
+					},
+					{
+						"name": "RunId",
+						"type": "nvarchar"
+					},
+					{
+						"name": "Source",
+						"type": "nvarchar"
+					},
+					{
+						"name": "Destination",
+						"type": "nvarchar"
+					},
+					{
+						"name": "LoadType",
+						"type": "nvarchar"
+					},
+					{
+						"name": "Status",
+						"type": "nvarchar"
+					},
+					{
+						"name": "TriggerType",
+						"type": "nvarchar"
+					},
+					{
+						"name": "TriggerId",
+						"type": "nvarchar"
+					},
+					{
+						"name": "TriggerName",
+						"type": "nvarchar"
+					},
+					{
+						"name": "TriggerTime",
+						"type": "nvarchar"
+					},
+					{
+						"name": "rowsCopied",
+						"type": "nvarchar"
+					},
+					{
+						"name": "RowsRead",
+						"type": "int",
+						"precision": 10
+					},
+					{
+						"name": "No_ParallelCopies",
+						"type": "int",
+						"precision": 10
+					},
+					{
+						"name": "copyDuration_in_secs",
+						"type": "nvarchar"
+					},
+					{
+						"name": "effectiveIntegrationRuntime",
+						"type": "nvarchar"
+					},
+					{
+						"name": "Source_Type",
+						"type": "nvarchar"
+					},
+					{
+						"name": "Sink_Type",
+						"type": "nvarchar"
+					},
+					{
+						"name": "Execution_Status",
+						"type": "nvarchar"
+					},
+					{
+						"name": "CopyActivity_Start_Time",
+						"type": "datetime",
+						"precision": 23,
+						"scale": 3
+					},
+					{
+						"name": "CopyActivity_End_Time",
+						"type": "datetime",
+						"precision": 23,
+						"scale": 3
+					},
+					{
+						"name": "CopyActivity_queuingDuration_in_secs",
+						"type": "nvarchar"
+					},
+					{
+						"name": "CopyActivity_timeToFirstByte_in_secs",
+						"type": "nvarchar"
+					},
+					{
+						"name": "CopyActivity_transferDuration_in_secs",
+						"type": "nvarchar"
+					}
+				],
+				"typeProperties": {
+					"schema": "datalake",
+					"table": "pipeline_log"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/adfconfig_sqlmi_selfhostedLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/S3GeographyDataSink')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "DataLakeLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "S3GeographyDataDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "s3datafiles/s3paydata",
+						"fileSystem": "dsml"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/S3GeographyDataSource')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AmazonS3LinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "S3GeographyDataDatasets"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AmazonS3Location",
+						"bucketName": "datafiles.translated.for.ai"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AmazonS3LinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/UAMSink')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "DataLakeLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"STGfilename": {
+						"type": "string",
+						"defaultValue": "demo"
+					}
+				},
+				"folder": {
+					"name": "ManagedSQLInstanceDatasets"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().STGfilename",
+							"type": "Expression"
+						},
+						"folderPath": "mi_data/uam_db",
+						"fileSystem": "dsml"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/UAMSource')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "uam_sqlmi_selfhostedLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "ManagedSQLInstanceDatasets"
+				},
+				"annotations": [],
+				"type": "AzureSqlMITable",
+				"schema": [],
+				"typeProperties": {}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/uam_sqlmi_selfhostedLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Xml1')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "DataLakeLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "ToDelete/test_copy_Delta_table"
+				},
+				"annotations": [],
+				"type": "Xml",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "raw_daily_2021-06-02_descriptions.xml",
+						"folderPath": "linkup_data/zip_data/StandardFeeds",
+						"fileSystem": "dsml"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Xml2')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AryaProfilesLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "ToDelete/test_copy_Delta_table"
+				},
+				"annotations": [],
+				"type": "Xml",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"fileName": "file.xml",
+						"folderPath": "linkuptest",
+						"container": "sampledata"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AryaProfilesLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/readconfig')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "sqlbackupblobLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"folder": {
+					"name": "ToDelete"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"fileName": "config.csv",
+						"folderPath": "config",
+						"container": "sqlbackups"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": [
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					},
+					{
+						"type": "String"
+					}
+				]
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/sqlbackupblobLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/xmljobdescriptions')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "DataLakeLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"rootTag": {
+						"type": "string",
+						"defaultValue": "jobs"
+					},
+					"rowTag": {
+						"type": "string",
+						"defaultValue": "job"
+					}
+				},
+				"folder": {
+					"name": "ToDelete/test_copy_Delta_table"
+				},
+				"annotations": [],
+				"type": "Xml",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "raw_daily_2021-06-02_descriptions.xml",
+						"folderPath": "linkup_data/zip_data/StandardFeeds",
+						"fileSystem": "dsml"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/DataLakeLinkedService')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AmazonS3LinkedService')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "For Obtaining geography data",
+				"annotations": [],
+				"type": "AmazonS3",
+				"typeProperties": {
+					"serviceUrl": "",
+					"accessKeyId": "[parameters('AmazonS3LinkedService_properties_typeProperties_accessKeyId')]",
+					"secretAccessKey": {
+						"type": "SecureString",
+						"value": "[parameters('AmazonS3LinkedService_secretAccessKey')]"
+					},
+					"authenticationType": "AccessKey"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AryaProfilesLinkedService')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobStorage",
+				"typeProperties": {
+					"connectionString": "[parameters('AryaProfilesLinkedService_connectionString')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureDatabricksDeltaLakeLinkedService')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureDatabricksDeltaLake",
+				"typeProperties": {
+					"domain": "https://adb-3005588108170439.19.azuredatabricks.net",
+					"clusterId": "0615-060547-diva666",
+					"accessToken": {
+						"type": "SecureString",
+						"value": "[parameters('AzureDatabricksDeltaLakeLinkedService_accessToken')]"
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureDatabricksLinkedService')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureDatabricks",
+				"typeProperties": {
+					"domain": "https://adb-3005588108170439.19.azuredatabricks.net",
+					"accessToken": {
+						"type": "SecureString",
+						"value": "[parameters('AzureDatabricksLinkedService_accessToken')]"
+					},
+					"existingClusterId": "0707-061233-awol748"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureKeyVaultLinkedService')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureKeyVault",
+				"typeProperties": {
+					"baseUrl": "[parameters('AzureKeyVaultLinkedService_properties_typeProperties_baseUrl')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureSQLMI_UAM')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureSqlMI",
+				"typeProperties": {
+					"connectionString": "[parameters('AzureSQLMI_UAM_connectionString')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureSQLManagedInstaceLinkedService')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureSqlMI",
+				"typeProperties": {
+					"connectionString": "[parameters('AzureSQLManagedInstaceLinkedService_connectionString')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DataLakeLinkedService')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('DataLakeLinkedService_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('DataLakeLinkedService_accountKey')]"
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Sftp_LinkupLinkedService')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "Sftp",
+				"typeProperties": {
+					"host": "[parameters('Sftp_LinkupLinkedService_properties_typeProperties_host')]",
+					"port": 22,
+					"skipHostKeyValidation": true,
+					"authenticationType": "Basic",
+					"userName": "[parameters('Sftp_LinkupLinkedService_properties_typeProperties_userName')]",
+					"password": {
+						"type": "SecureString",
+						"value": "[parameters('Sftp_LinkupLinkedService_password')]"
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/adfconfig_sqlmi_public')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureSqlMI",
+				"typeProperties": {
+					"connectionString": "[parameters('adfconfig_sqlmi_public_connectionString')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/adfconfig_sqlmi_selfhostedLinkedService')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureSqlMI",
+				"typeProperties": {
+					"connectionString": "[parameters('adfconfig_sqlmi_selfhostedLinkedService_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "selfhostedIR-MI",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/integrationRuntimes/selfhostedIR-MI')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/datawarehouse_sqlmi_selhostedLinkedService')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureSqlMI",
+				"typeProperties": {
+					"connectionString": "[parameters('datawarehouse_sqlmi_selhostedLinkedService_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "selfhostedIR-MI",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/integrationRuntimes/selfhostedIR-MI')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/sqlbackupblobLinkedService')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobStorage",
+				"typeProperties": {
+					"connectionString": "[parameters('sqlbackupblobLinkedService_connectionString')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/uam_sqlmi_selfhostedLinkedService')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureSqlMI",
+				"typeProperties": {
+					"connectionString": "[parameters('uam_sqlmi_selfhostedLinkedService_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "selfhostedIR-MI",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/integrationRuntimes/selfhostedIR-MI')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/integrationRuntime1')]",
+			"type": "Microsoft.DataFactory/factories/integrationRuntimes",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"type": "Managed",
+				"typeProperties": {
+					"computeProperties": {
+						"location": "East US",
+						"dataFlowProperties": {
+							"computeType": "General",
+							"coreCount": 8,
+							"timeToLive": 10,
+							"cleanup": false
+						}
+					}
+				},
+				"managedVirtualNetwork": {
+					"type": "ManagedVirtualNetworkReference",
+					"referenceName": "default"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/managedVirtualNetworks/default')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/selfhostedIR-MI')]",
+			"type": "Microsoft.DataFactory/factories/integrationRuntimes",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"type": "SelfHosted",
+				"typeProperties": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/dataflow1')]",
+			"type": "Microsoft.DataFactory/factories/dataflows",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"type": "MappingDataFlow",
+				"typeProperties": {
+					"sources": [
+						{
+							"dataset": {
+								"referenceName": "DataWarehouseSink",
+								"type": "DatasetReference"
+							},
+							"name": "source1"
+						}
+					],
+					"sinks": [
+						{
+							"dataset": {
+								"referenceName": "ADFConfigSource_OLD",
+								"type": "DatasetReference"
+							},
+							"name": "sink1"
+						}
+					],
+					"transformations": [
+						{
+							"name": "Aggregate1"
+						},
+						{
+							"name": "DerivedColumn1"
+						},
+						{
+							"name": "AlterRow1"
+						}
+					],
+					"script": "parameters{\n\tsourcetable as string,\n\twatermark_field as string\n}\nsource(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tignoreNoFilesFound: false,\n\twildcardPaths:[($sourcetable)]) ~> source1\nsource1 aggregate(max_Created_Modified_Date = max(toTimestamp(toString(byName($watermark_field)), 'yyyy-MM-dd HH:mm:ss'))) ~> Aggregate1\nAggregate1 derive(TableName = $sourcetable) ~> DerivedColumn1\nDerivedColumn1 alterRow(updateIf(isNull(max_Created_Modified_Date)==false())) ~> AlterRow1\nAlterRow1 sink(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tdeletable:false,\n\tinsertable:false,\n\tupdateable:true,\n\tupsertable:false,\n\tkeys:['Dest_table'],\n\tskipKeyWrites:true,\n\tformat: 'table',\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true,\n\terrorHandlingOption: 'stopOnFirstError',\n\tmapColumn(\n\t\tWatermark_Value = max_Created_Modified_Date,\n\t\tDest_table = TableName\n\t)) ~> sink1"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/DataWarehouseSink')]",
+				"[concat(variables('factoryId'), '/datasets/ADFConfigSource_OLD')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/default')]",
+			"type": "Microsoft.DataFactory/factories/managedVirtualNetworks",
+			"apiVersion": "2018-06-01",
+			"properties": {},
+			"dependsOn": []
+		}
+	]
+}

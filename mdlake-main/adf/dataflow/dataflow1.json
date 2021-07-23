@@ -1,0 +1,38 @@
+{
+	"name": "dataflow1",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "DataWarehouseSink",
+						"type": "DatasetReference"
+					},
+					"name": "source1"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ADFConfigSource_OLD",
+						"type": "DatasetReference"
+					},
+					"name": "sink1"
+				}
+			],
+			"transformations": [
+				{
+					"name": "Aggregate1"
+				},
+				{
+					"name": "DerivedColumn1"
+				},
+				{
+					"name": "AlterRow1"
+				}
+			],
+			"script": "parameters{\n\tsourcetable as string,\n\twatermark_field as string\n}\nsource(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tignoreNoFilesFound: false,\n\twildcardPaths:[($sourcetable)]) ~> source1\nsource1 aggregate(max_Created_Modified_Date = max(toTimestamp(toString(byName($watermark_field)), 'yyyy-MM-dd HH:mm:ss'))) ~> Aggregate1\nAggregate1 derive(TableName = $sourcetable) ~> DerivedColumn1\nDerivedColumn1 alterRow(updateIf(isNull(max_Created_Modified_Date)==false())) ~> AlterRow1\nAlterRow1 sink(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tdeletable:false,\n\tinsertable:false,\n\tupdateable:true,\n\tupsertable:false,\n\tkeys:['Dest_table'],\n\tskipKeyWrites:true,\n\tformat: 'table',\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true,\n\terrorHandlingOption: 'stopOnFirstError',\n\tmapColumn(\n\t\tWatermark_Value = max_Created_Modified_Date,\n\t\tDest_table = TableName\n\t)) ~> sink1"
+		}
+	}
+}

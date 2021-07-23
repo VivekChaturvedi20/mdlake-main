@@ -1,0 +1,9 @@
+{
+	"name": "USE-IC-DA-DLDF",
+	"location": "eastus",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "0594fa43-882c-4ab1-817b-2618c27fe827",
+		"tenantId": "e9d21387-43f1-4e06-a253-f9ed9096dc48"
+	}
+}

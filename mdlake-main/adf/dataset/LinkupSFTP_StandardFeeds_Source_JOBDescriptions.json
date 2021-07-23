@@ -1,0 +1,36 @@
+{
+	"name": "LinkupSFTP_StandardFeeds_Source_JOBDescriptions",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "Sftp_LinkupLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"sourcefolder": {
+				"type": "string"
+			},
+			"sourcefile": {
+				"type": "string"
+			}
+		},
+		"folder": {
+			"name": "LinkupDatasets/standardfeeds"
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "SftpLocation",
+				"fileName": {
+					"value": "@dataset().sourcefile",
+					"type": "Expression"
+				},
+				"folderPath": {
+					"value": "@dataset().sourcefolder",
+					"type": "Expression"
+				}
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

@@ -1,0 +1,16 @@
+{
+	"name": "UAMSource",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "uam_sqlmi_selfhostedLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"folder": {
+			"name": "ManagedSQLInstanceDatasets"
+		},
+		"annotations": [],
+		"type": "AzureSqlMITable",
+		"schema": []
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

@@ -1,0 +1,33 @@
+{
+	"name": "xmljobdescriptions",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "DataLakeLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"rootTag": {
+				"type": "string",
+				"defaultValue": "jobs"
+			},
+			"rowTag": {
+				"type": "string",
+				"defaultValue": "job"
+			}
+		},
+		"folder": {
+			"name": "ToDelete/test_copy_Delta_table"
+		},
+		"annotations": [],
+		"type": "Xml",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": "raw_daily_2021-06-02_descriptions.xml",
+				"folderPath": "linkup_data/zip_data/StandardFeeds",
+				"fileSystem": "dsml"
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

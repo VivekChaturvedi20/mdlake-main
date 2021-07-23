@@ -1,0 +1,20 @@
+{
+	"name": "ADFConfigSource",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "adfconfig_sqlmi_selfhostedLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"folder": {
+			"name": "ManagedSQLInstanceDatasets"
+		},
+		"annotations": [],
+		"type": "AzureSqlMITable",
+		"schema": [],
+		"typeProperties": {
+			"schema": "datalake",
+			"table": "adfconf"
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

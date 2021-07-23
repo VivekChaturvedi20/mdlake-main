@@ -1,0 +1,44 @@
+{
+	"name": "DW-UAM-FullPipeline",
+	"properties": {
+		"activities": [
+			{
+				"name": "DW-UAM-incrementalnew",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "DW-UAM-IncrementalAndFullDataProcessing",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "DW-UAM-Databricks-Ingestion",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "DW-UAM-incrementalnew",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "DW-UAM-Databricks-Ingestion",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			}
+		],
+		"folder": {
+			"name": "DW-UAM"
+		},
+		"annotations": []
+	}
+}

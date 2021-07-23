@@ -1,0 +1,277 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "USE-IC-DA-DLDF"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/pipeline1')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Append variable1",
+						"type": "AppendVariable",
+						"dependsOn": [],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "ListOfFiles",
+							"value": {
+								"value": "@pipeline().parameters.companyrefpath",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Append variable2",
+						"type": "AppendVariable",
+						"dependsOn": [
+							{
+								"activity": "Append variable1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "ListOfFiles",
+							"value": {
+								"value": "@pipeline().parameters.fulljobdescpath",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Append variable3",
+						"type": "AppendVariable",
+						"dependsOn": [
+							{
+								"activity": "Append variable2",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "ListOfFiles",
+							"value": {
+								"value": "@pipeline().parameters.jobrecordspath",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Append variable4",
+						"type": "AppendVariable",
+						"dependsOn": [
+							{
+								"activity": "Append variable3",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "ListOfFiles",
+							"value": {
+								"value": "@pipeline().parameters.marketreportpath",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Append variable4",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@variables('ListOfFiles')",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings",
+												"compressionProperties": {
+													"type": "ZipDeflateReadSettings"
+												}
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "LinkupSFTP_StandardFeeds_Source",
+											"type": "DatasetReference",
+											"parameters": {
+												"fullpath": {
+													"value": "@item().name",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "Linkup_StandardFeeds_Sink",
+											"type": "DatasetReference",
+											"parameters": {
+												"sinkfolder": {
+													"value": "@concat(string(pipeline().parameters.sinkpath),'/',string(item().name))",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"parameters": {
+					"companyrefpath": {
+						"type": "string",
+						"defaultValue": "JDE/Standard/Feeds/Raw Full PIT Company Reference/2021/05/raw_pit_company_reference_full_2021-05-31.csv.gz"
+					},
+					"jobrecordspath": {
+						"type": "string",
+						"defaultValue": "JDE/Standard/Feeds/Raw Full Job Records/2021/05/raw_job_archive_2021-05-31.tar.gz"
+					},
+					"fulljobdescpath": {
+						"type": "string",
+						"defaultValue": "JDE/Standard/Feeds/Raw Full Job Descriptions/2021/05/linkup_job_descriptions_2021-05-31.tar.gz"
+					},
+					"marketreportpath": {
+						"type": "string",
+						"defaultValue": "JDE/Standard/MarketReports/Reports/Core_Ticker_Analytics_v2/core_ticker_analytics_v2_2021-05-31.csv.gz"
+					},
+					"sinkpath": {
+						"type": "string",
+						"defaultValue": "linkup_data/zip_data/StandardFeeds/"
+					}
+				},
+				"variables": {
+					"ListOfFiles": {
+						"type": "Array"
+					}
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/LinkupSFTP_StandardFeeds_Source')]",
+				"[concat(variables('factoryId'), '/datasets/Linkup_StandardFeeds_Sink')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LinkupSFTP_StandardFeeds_Source')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "Sftp_LinkupLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"fullpath": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "LinkupDatasets/standardfeeds"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "SftpLocation",
+						"folderPath": {
+							"value": "@dataset().fullpath",
+							"type": "Expression"
+						}
+					},
+					"compression": {
+						"type": "ZipDeflate",
+						"level": "Optimal"
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Linkup_StandardFeeds_Sink')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "DataLakeLinkedService",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"sinkfolder": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "LinkupDatasets/standardfeeds"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": {
+							"value": "@dataset().sinkfolder",
+							"type": "Expression"
+						},
+						"fileSystem": "dsml"
+					}
+				}
+			},
+			"dependsOn": []
+		}
+	]
+}

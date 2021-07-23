@@ -1,0 +1,37 @@
+{
+	"name": "Linkup_StandardFeeds_Sink",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "DataLakeLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"sinkfolder": {
+				"type": "string"
+			},
+			"sinkfilename": {
+				"type": "string"
+			}
+		},
+		"folder": {
+			"name": "LinkupDatasets/standardfeeds"
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": {
+					"value": "@dataset().sinkfilename",
+					"type": "Expression"
+				},
+				"folderPath": {
+					"value": "@dataset().sinkfolder",
+					"type": "Expression"
+				},
+				"fileSystem": "dsml"
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

@@ -1,0 +1,343 @@
+{
+	"name": "Linkup-Data-Extraction",
+	"properties": {
+		"activities": [
+			{
+				"name": "Get DiffMetadata",
+				"type": "GetMetadata",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"dataset": {
+						"referenceName": "LinkupSFTP_Diff_Source_OnlyMetadataLookup",
+						"type": "DatasetReference",
+						"parameters": {
+							"filename": "*"
+						}
+					},
+					"fieldList": [
+						"childItems"
+					],
+					"storeSettings": {
+						"type": "SftpReadSettings",
+						"recursive": true,
+						"modifiedDatetimeStart": {
+							"value": "@pipeline().parameters.startDate",
+							"type": "Expression"
+						},
+						"modifiedDatetimeEnd": {
+							"value": "@pipeline().parameters.endDate",
+							"type": "Expression"
+						},
+						"enablePartitionDiscovery": false
+					},
+					"formatSettings": {
+						"type": "BinaryReadSettings"
+					}
+				}
+			},
+			{
+				"name": "ForEach-Diff",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Get DiffMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Get DiffMetadata').output.childitems",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "Copy Diff Data",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "BinarySource",
+									"storeSettings": {
+										"type": "SftpReadSettings",
+										"recursive": true,
+										"modifiedDatetimeStart": {
+											"value": "@pipeline().parameters.startDate",
+											"type": "Expression"
+										},
+										"wildcardFolderPath": {
+											"value": "@concat(string(pipeline().parameters.rootPathdiff),'/',string(item().name),'/')",
+											"type": "Expression"
+										},
+										"wildcardFileName": "*.zip",
+										"deleteFilesAfterCompletion": false
+									},
+									"formatSettings": {
+										"type": "BinaryReadSettings",
+										"compressionProperties": {
+											"type": "ZipDeflateReadSettings"
+										}
+									}
+								},
+								"sink": {
+									"type": "BinarySink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									}
+								},
+								"enableStaging": false,
+								"logSettings": {
+									"enableCopyActivityLog": true,
+									"copyActivityLogSettings": {
+										"logLevel": "Info",
+										"enableReliableLogging": false
+									},
+									"logLocationSettings": {
+										"linkedServiceName": {
+											"referenceName": "DataLakeLinkedService",
+											"type": "LinkedServiceReference"
+										},
+										"path": "dsml/linkup_data/extracted_data/Kornferry/logs/diff"
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "LinkupSFTP_Diff_Source_CopyData",
+									"type": "DatasetReference",
+									"parameters": {
+										"foldername": {
+											"value": "@concat(string(pipeline().parameters.rootPathdiff),'/',string(item().name),'/')",
+											"type": "Expression"
+										},
+										"filename": "*.zip"
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "Linkup_Diff_Sink",
+									"type": "DatasetReference",
+									"parameters": {
+										"sinkfilename": {
+											"value": "@concat(substring(string(item().name),0,10),'_d_linkup_kornferry.xml')",
+											"type": "Expression"
+										},
+										"sinkfolder": {
+											"value": "@concat(string(pipeline().parameters.sinkpathdiff),'/',substring(string(item().name),0,10),'/')",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			},
+			{
+				"name": "Get FullMetadata",
+				"type": "GetMetadata",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"dataset": {
+						"referenceName": "LinkupSFTP_Full_Source_OnlyMetadataLookup",
+						"type": "DatasetReference",
+						"parameters": {
+							"filename": "*"
+						}
+					},
+					"fieldList": [
+						"childItems"
+					],
+					"storeSettings": {
+						"type": "SftpReadSettings",
+						"recursive": true,
+						"modifiedDatetimeStart": {
+							"value": "@pipeline().parameters.startDate",
+							"type": "Expression"
+						},
+						"modifiedDatetimeEnd": {
+							"value": "@pipeline().parameters.endDate",
+							"type": "Expression"
+						},
+						"enablePartitionDiscovery": false
+					},
+					"formatSettings": {
+						"type": "BinaryReadSettings"
+					}
+				}
+			},
+			{
+				"name": "ForEach-Full",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Get FullMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Get FullMetadata').output.childitems",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "Copy Full Data",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "BinarySource",
+									"storeSettings": {
+										"type": "SftpReadSettings",
+										"recursive": true,
+										"modifiedDatetimeStart": {
+											"value": "@pipeline().parameters.startDate",
+											"type": "Expression"
+										},
+										"wildcardFolderPath": {
+											"value": "@concat(string(pipeline().parameters.rootPathfull),'/',string(item().name),'/')",
+											"type": "Expression"
+										},
+										"wildcardFileName": "*.zip",
+										"deleteFilesAfterCompletion": false
+									},
+									"formatSettings": {
+										"type": "BinaryReadSettings",
+										"compressionProperties": {
+											"type": "ZipDeflateReadSettings"
+										}
+									}
+								},
+								"sink": {
+									"type": "BinarySink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									}
+								},
+								"enableStaging": false,
+								"logSettings": {
+									"enableCopyActivityLog": true,
+									"copyActivityLogSettings": {
+										"logLevel": "Info",
+										"enableReliableLogging": false
+									},
+									"logLocationSettings": {
+										"linkedServiceName": {
+											"referenceName": "DataLakeLinkedService",
+											"type": "LinkedServiceReference"
+										},
+										"path": "dsml/linkup_data/extracted_data/Kornferry/logs/full"
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "LinkupSFTP_Full_Source_CopyData",
+									"type": "DatasetReference",
+									"parameters": {
+										"foldername": {
+											"value": "@concat(string(pipeline().parameters.rootPathfull),'/',string(item().name),'/')",
+											"type": "Expression"
+										},
+										"filename": "*.zip"
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "Linkup_Diff_Sink",
+									"type": "DatasetReference",
+									"parameters": {
+										"sinkfilename": {
+											"value": "@concat(substring(string(item().name),0,10),'_linkup_kornferry.xml')",
+											"type": "Expression"
+										},
+										"sinkfolder": {
+											"value": "@concat(string(pipeline().parameters.sinkpathfull),'/',substring(string(item().name),0,10),'/')",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"rootPathdiff": {
+				"type": "string",
+				"defaultValue": "JDE/Korn Ferry/Feeds/Korn Ferry Organic/Diff"
+			},
+			"filename": {
+				"type": "string",
+				"defaultValue": "*.zip"
+			},
+			"rootPathfull": {
+				"type": "string",
+				"defaultValue": "JDE/Korn Ferry/Feeds/Korn Ferry Organic/Full"
+			},
+			"startDate": {
+				"type": "string",
+				"defaultValue": "06/08/2021 00:00:00"
+			},
+			"endDate": {
+				"type": "string",
+				"defaultValue": "06/10/2021 00:00:00"
+			},
+			"sinkpathdiff": {
+				"type": "string",
+				"defaultValue": "linkup_data/extracted_data/Kornferry/Diff"
+			},
+			"sinkpathfull": {
+				"type": "string",
+				"defaultValue": "linkup_data/extracted_data/Kornferry/Full"
+			}
+		},
+		"folder": {
+			"name": "Linkup_KornferryFeeds"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-07-01T13:27:04Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

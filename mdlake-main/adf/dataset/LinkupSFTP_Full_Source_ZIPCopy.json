@@ -1,0 +1,33 @@
+{
+	"name": "LinkupSFTP_Full_Source_ZIPCopy",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "Sftp_LinkupLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"foldername": {
+				"type": "string"
+			},
+			"filename": {
+				"type": "string"
+			}
+		},
+		"folder": {
+			"name": "LinkupDatasets/copyzips"
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "SftpLocation",
+				"fileName": {
+					"value": "@dataset().filename",
+					"type": "Expression"
+				},
+				"folderPath": "/@dataset().foldername"
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

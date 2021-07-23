@@ -1,0 +1,31 @@
+{
+	"name": "AryaIngestionSource",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "DataLakeLinkedService",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"filename": {
+				"type": "string"
+			}
+		},
+		"folder": {
+			"name": "AryaProfilesDatasets"
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": {
+					"value": "@dataset().filename",
+					"type": "Expression"
+				},
+				"folderPath": "aryaprofiles/extracted_zip_data",
+				"fileSystem": "dsml"
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}
